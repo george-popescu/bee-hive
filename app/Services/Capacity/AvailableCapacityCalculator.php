@@ -29,6 +29,7 @@ class AvailableCapacityCalculator
         $leaveDates = [];
 
         $timeOffs = $person->timeOffs()
+            ->where('active', true)
             ->whereDate('start_date', '<=', $monthEnd->toDateString())
             ->whereDate('end_date', '>=', $monthStart->toDateString())
             ->get();

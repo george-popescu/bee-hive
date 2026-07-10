@@ -44,6 +44,18 @@ class Project extends Model
         return $this->hasMany(ClickUpTask::class);
     }
 
+    /** @return HasMany<ClickUpFolder, $this> */
+    public function clickUpFolders(): HasMany
+    {
+        return $this->hasMany(ClickUpFolder::class);
+    }
+
+    /** @return HasMany<ClickUpList, $this> */
+    public function clickUpLists(): HasMany
+    {
+        return $this->hasMany(ClickUpList::class);
+    }
+
     /** @return HasMany<TimeEntry, $this> */
     public function timeEntries(): HasMany
     {

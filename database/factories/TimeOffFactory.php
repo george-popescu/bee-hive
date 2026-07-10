@@ -31,6 +31,8 @@ class TimeOffFactory extends Factory
             'start_date' => $startDate->toDateString(),
             'end_date' => $startDate->addDays($daysReported - 1)->toDateString(),
             'days_reported' => $daysReported,
+            'source' => 'manual',
+            'active' => true,
             'last_synced_at' => now(),
         ];
     }

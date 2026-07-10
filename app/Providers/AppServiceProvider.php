@@ -2,8 +2,11 @@
 
 namespace App\Providers;
 
+use App\Contracts\ClickUpClient;
 use App\Enums\RoleName;
 use App\Models\User;
+use App\Services\ClickUp\HierarchySynchronizer;
+use App\Services\ClickUp\HttpClickUpClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +21,19 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(ClickUpClient::class, fn (): ClickUpClient => new HttpClickUpClient(
+            token: (string) config('services.clickup.token'),
+            workspaceId: (string) config('services.clickup.workspace_id'),
+            projectsSpaceId: (string) config('services.clickup.projects_space_id'),
+            holidaysListId: (string) config('services.clickup.holidays_list_id'),
+            baseUrl: (string) config('services.clickup.base_url'),
+        ));
+
+        $this->app->bind(HierarchySynchronizer::class, fn (): HierarchySynchronizer => new HierarchySynchronizer(
+            client: $this->app->make(ClickUpClient::class),
+            projectsSpaceId: (string) config('services.clickup.projects_space_id'),
+            internalFolderIds: config('services.clickup.internal_folder_ids', []),
+        ));
     }
 
     /**

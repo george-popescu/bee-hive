@@ -33,6 +33,12 @@ class ClickUpTask extends Model
         return $this->belongsTo(Project::class);
     }
 
+    /** @return BelongsTo<ClickUpList, $this> */
+    public function clickUpList(): BelongsTo
+    {
+        return $this->belongsTo(ClickUpList::class, 'clickup_list_id', 'clickup_list_id');
+    }
+
     /** @return BelongsToMany<Person, $this> */
     public function assignees(): BelongsToMany
     {

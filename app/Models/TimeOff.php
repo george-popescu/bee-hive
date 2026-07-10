@@ -16,6 +16,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'start_date',
     'end_date',
     'days_reported',
+    'source',
+    'active',
     'last_synced_at',
 ])]
 class TimeOff extends Model
@@ -36,6 +38,7 @@ class TimeOff extends Model
             'start_date' => 'date',
             'end_date' => 'date',
             'days_reported' => 'decimal:2',
+            'active' => 'boolean',
             'last_synced_at' => 'datetime',
         ];
     }
