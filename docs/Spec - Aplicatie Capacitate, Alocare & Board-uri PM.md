@@ -411,12 +411,12 @@ Datele au **surse diferite** în funcție de tip. Acesta e un punct central al p
 
 ### 9.2b Concediile — din ClickUp (API, automat)
 - Zilele de concediu/absență se trag din ClickUp și populează entitatea `TimeOff` (§3.1).
-- **Unde stau în ClickUp** (de confirmat structura exactă cu clientul — variantele uzuale):
-  - o listă dedicată de tip „Concedii / Time Off" unde fiecare task = o cerere de concediu, cu **asignat** (persoana), **start date** și **due date** (intervalul), eventual un câmp/tag pentru tip (odihnă / medical / neplătit);
-  - sau funcția nativă de Time-off / workload din ClickUp, dacă e activată pe plan.
-- Maparea: pentru fiecare task de concediu → `person` = asignatul, `start`/`end` = start/due date, `type` = din tag/câmp. Se sparg pe luni și se numără **zilele lucrătoare** din fiecare lună (§4.4).
+- **Sursa confirmată:** workspace `The BeeCoded Workspace` (`4591583`) → Space `HR Shared` (`8720055`) → lista folderless `Holidays (PTO)` (`67721810`).
+- Fiecare task reprezintă o cerere/perioadă de concediu. Persoana vine din `assignees`, iar intervalul din `start_date` și `due_date`. Dacă există mai mulți asignați, se creează câte un `TimeOff` pentru fiecare persoană.
+- Statusurile listei sunt `requires approval`, `on leave`, `approved` și `complete`. Doar `approved`, `on leave` și `complete` reduc capacitatea; `requires approval` rămâne vizibil, dar nu reduce capacitatea până la aprobare.
+- Câmpul numeric `Vacation period` poate fi păstrat pentru control, însă numărul de zile lucrătoare se derivează canonic din `start_date`–`due_date`. Tipul implicit este `PTO` până când este identificat un tag sau câmp separat pentru odihnă / medical / neplătit.
+- Intervalele se sparg pe luni și se numără **zilele lucrătoare** din fiecare lună (§4.4).
 - Se sincronizează în același job cu restul (§9.2) și respectă aceeași cadență + buton „Sincronizează acum".
-- Dev-ul are nevoie să știe **ID-ul listei/space-ului de concedii** din ClickUp și cum e marcat tipul de concediu.
 
 ### 9.3 Planul (alocările) — manual în app
 - Planul de alocare (`allocations.hours`) se introduce și se editează **manual** în aplicație (tab-ul „Plan (ore)"). Orele sunt valoarea canonică; procentul este calculat. Planul nu are sursă externă — este o decizie de planificare.

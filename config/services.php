@@ -35,4 +35,11 @@ return [
         ],
     ],
 
+    'clickup' => [
+        'token' => env('CLICKUP_TOKEN'),
+        'workspace_id' => env('CLICKUP_WORKSPACE_ID'),
+        'projects_space_id' => env('CLICKUP_PROJECTS_SPACE_ID'),
+        'holidays_list_id' => env('CLICKUP_HOLIDAYS_LIST_ID'),
+    ],
+
 ];
