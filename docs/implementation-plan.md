@@ -172,6 +172,14 @@ Ecranul reproduce prezentarea și valorile capturii „Plan vs Realizat” pe ac
 
 Procentele, orele și culorile coincid cu dashboardul de referință pe aceleași date.
 
+### Status implementare — 11 iulie 2026
+
+- Finalizat: matrice lunară Estimat vs Realizat raportată la capacitatea disponibilă după concediu, cu orele planificate, pontajele ClickUp și ajustările auditate agregate bulk.
+- Finalizat: concedii pe zile lucrătoare fără dublarea intervalelor suprapuse, indicator zile/ore și starea „concediu” când capacitatea disponibilă este zero.
+- Finalizat: selector 3 / 6 / toate lunile fără schimbarea mediilor pe orizontul complet, filtre persoană/rol/proiect, activități interne și externi listați separat fără normă.
+- Finalizat: pragurile semantice `0%`, sub `90%`, `90–105%` și peste `105%`, legendă vizibilă, sticky headers și navigație condiționată de permisiunea `management.view`.
+- Verificat: teste de autentificare, formule, raportare lipsă, concediu integral, externi, filtre-proiect și praguri de culoare; validare în browser pe baza de date locală fără erori în consolă.
+
 ---
 
 ## Milestone 5 — Board PM pentru proiecte T&M

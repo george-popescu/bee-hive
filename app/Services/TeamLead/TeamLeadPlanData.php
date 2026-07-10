@@ -3,7 +3,6 @@
 namespace App\Services\TeamLead;
 
 use App\Enums\PermissionName;
-use App\Enums\SettingKey;
 use App\Models\ActualAdjustment;
 use App\Models\Allocation;
 use App\Models\Person;
@@ -11,24 +10,23 @@ use App\Models\Project;
 use App\Models\TimeEntry;
 use App\Models\User;
 use App\Services\Capacity\PlanVarianceCalculator;
-use App\Services\Capacity\SettingsService;
+use App\Services\Planning\PlanningPeriod;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use LogicException;
-use Throwable;
 
 final class TeamLeadPlanData
 {
     public function __construct(
         private readonly TeamLeadScope $scope,
-        private readonly SettingsService $settings,
+        private readonly PlanningPeriod $period,
         private readonly PlanVarianceCalculator $variance,
     ) {}
 
     /** @return array<string, mixed> */
     public function for(User $user): array
     {
-        $months = $this->months();
+        $months = $this->period->months();
         $firstMonth = $months[0] ?? throw new LogicException('The planning period has no months.');
         $lastMonth = $months[count($months) - 1] ?? throw new LogicException('The planning period has no months.');
         $monthKeys = array_map(fn (CarbonImmutable $month): string => $month->format('Y-m'), $months);
@@ -91,7 +89,7 @@ final class TeamLeadPlanData
         return [
             'months' => array_map(fn (CarbonImmutable $month): array => [
                 'key' => $month->format('Y-m'),
-                'label' => $this->monthLabel($month),
+                'label' => $this->period->label($month),
             ], $months),
             'people' => $people->map(fn (Person $person): array => [
                 'id' => $person->getKey(),
@@ -314,45 +312,7 @@ final class TeamLeadPlanData
     /** @return list<string> */
     public function monthKeys(): array
     {
-        return array_map(fn (CarbonImmutable $month): string => $month->format('Y-m'), $this->months());
-    }
-
-    /** @return list<CarbonImmutable> */
-    private function months(): array
-    {
-        $fallbackStart = Allocation::query()->min('month');
-        $fallbackEnd = Allocation::query()->max('month');
-        $start = $this->dateSetting(SettingKey::ActivePeriodStart)
-            ?? ($fallbackStart === null ? now()->startOfMonth()->toImmutable() : CarbonImmutable::parse($fallbackStart));
-        $end = $this->dateSetting(SettingKey::ActivePeriodEnd)
-            ?? ($fallbackEnd === null ? $start->addMonths(5) : CarbonImmutable::parse($fallbackEnd));
-
-        if ($start->isAfter($end)) {
-            [$start, $end] = [$end, $start];
-        }
-
-        $months = [];
-
-        for ($month = $start->startOfMonth(); $month->lessThanOrEqualTo($end) && count($months) < 36; $month = $month->addMonth()) {
-            $months[] = $month;
-        }
-
-        return $months;
-    }
-
-    private function dateSetting(SettingKey $key): ?CarbonImmutable
-    {
-        $value = $this->settings->value($key);
-
-        if (! is_string($value) || trim($value) === '') {
-            return null;
-        }
-
-        try {
-            return CarbonImmutable::parse($value)->startOfMonth();
-        } catch (Throwable) {
-            return null;
-        }
+        return $this->period->monthKeys();
     }
 
     /**
@@ -387,25 +347,5 @@ final class TeamLeadPlanData
             'internal' => false,
             'active' => $project->active,
         ];
-    }
-
-    private function monthLabel(CarbonImmutable $month): string
-    {
-        $labels = [
-            1 => 'Ian',
-            2 => 'Feb',
-            3 => 'Mar',
-            4 => 'Apr',
-            5 => 'Mai',
-            6 => 'Iun',
-            7 => 'Iul',
-            8 => 'Aug',
-            9 => 'Sep',
-            10 => 'Oct',
-            11 => 'Nov',
-            12 => 'Dec',
-        ];
-
-        return $labels[$month->month]." '".$month->format('y');
     }
 }

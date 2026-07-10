@@ -1,5 +1,11 @@
 import { Link, usePage } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid, UsersRound } from 'lucide-react';
+import {
+    BookOpen,
+    ChartNoAxesCombined,
+    FolderGit2,
+    LayoutGrid,
+    UsersRound,
+} from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -14,6 +20,7 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
+import { index as managementIndex } from '@/routes/management';
 import { index as teamLeadIndex } from '@/routes/team_lead';
 import type { NavItem } from '@/types';
 
@@ -22,6 +29,12 @@ const mainNavItems: Array<NavItem & { permission?: string }> = [
         title: 'Dashboard',
         href: dashboard(),
         icon: LayoutGrid,
+    },
+    {
+        title: 'Utilizare echipă',
+        href: managementIndex(),
+        icon: ChartNoAxesCombined,
+        permission: 'management.view',
     },
     {
         title: 'Planificare echipă',
