@@ -57,7 +57,7 @@ final class PeopleSynchronizer
                 'clickup_user_id' => $clickUpUserId,
                 'email' => $email ?? $person->email,
                 'is_external' => false,
-                'active' => true,
+                'active' => ! $person->manually_inactive,
             ])->save();
 
             if (! $people->contains(fn (Person $candidate): bool => $candidate->is($person))) {

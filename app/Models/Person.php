@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'hourly_rate',
     'is_external',
     'active',
+    'manually_inactive',
 ])]
 class Person extends Model
 {
@@ -100,6 +101,7 @@ class Person extends Model
             'hourly_rate' => 'decimal:2',
             'is_external' => 'boolean',
             'active' => 'boolean',
+            'manually_inactive' => 'boolean',
         ];
     }
 }

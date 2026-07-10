@@ -412,3 +412,29 @@ it('reclassifies former workspace members with current time entries as active ex
         ->and($formerMember->active)->toBeTrue()
         ->and(TimeEntry::query()->sole()->person_id)->toBe($formerMember->id);
 });
+
+it('does not reactivate a manually inactive external person when importing time entries', function () {
+    $formerMember = Person::factory()->create([
+        'clickup_user_id' => '999',
+        'name' => 'Contractor Extern',
+        'is_external' => true,
+        'active' => false,
+        'manually_inactive' => true,
+    ]);
+    Project::factory()->create([
+        'clickup_folder_id' => null,
+        'client' => 'Acme',
+        'name' => 'Portal',
+    ]);
+    app()->instance(ClickUpClient::class, clickUpClientFake(externalTimeEntry: true));
+
+    app(ClickUpSyncService::class)->sync(new ClickUpSyncOptions(
+        from: CarbonImmutable::parse('2026-07-01')->startOfDay(),
+        to: CarbonImmutable::parse('2026-07-31')->endOfDay(),
+    ));
+
+    expect($formerMember->refresh()->is_external)->toBeTrue()
+        ->and($formerMember->active)->toBeFalse()
+        ->and($formerMember->manually_inactive)->toBeTrue()
+        ->and(TimeEntry::query()->sole()->person_id)->toBe($formerMember->id);
+});

@@ -5,6 +5,7 @@ import {
     ClipboardList,
     FolderGit2,
     LayoutGrid,
+    Settings2,
     UsersRound,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
@@ -21,12 +22,13 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
+import { index as adminIndex } from '@/routes/admin';
 import { index as managementIndex } from '@/routes/management';
 import { index as pmBoardIndex } from '@/routes/pm_board';
 import { index as teamLeadIndex } from '@/routes/team_lead';
 import type { NavItem } from '@/types';
 
-const mainNavItems: Array<NavItem & { permission?: string }> = [
+const mainNavItems: Array<NavItem & { permissions?: string[] }> = [
     {
         title: 'Dashboard',
         href: dashboard(),
@@ -36,19 +38,29 @@ const mainNavItems: Array<NavItem & { permission?: string }> = [
         title: 'Utilizare echipă',
         href: managementIndex(),
         icon: ChartNoAxesCombined,
-        permission: 'management.view',
+        permissions: ['management.view'],
     },
     {
         title: 'Planificare echipă',
         href: teamLeadIndex(),
         icon: UsersRound,
-        permission: 'team-lead.view',
+        permissions: ['team-lead.view'],
     },
     {
         title: 'Board-uri PM',
         href: pmBoardIndex(),
         icon: ClipboardList,
-        permission: 'pm-boards.view',
+        permissions: ['pm-boards.view'],
+    },
+    {
+        title: 'Administrare',
+        href: adminIndex(),
+        icon: Settings2,
+        permissions: [
+            'settings.manage',
+            'users.manage',
+            'roles-and-permissions.manage',
+        ],
     },
 ];
 
@@ -69,7 +81,10 @@ export function AppSidebar() {
     const { auth } = usePage().props;
     const visibleNavItems = mainNavItems.filter(
         (item) =>
-            !item.permission || auth.permissions.includes(item.permission),
+            !item.permissions ||
+            item.permissions.some((permission) =>
+                auth.permissions.includes(permission),
+            ),
     );
 
     return (

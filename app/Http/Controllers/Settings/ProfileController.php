@@ -2,15 +2,21 @@
 
 namespace App\Http\Controllers\Settings;
 
+use App\Enums\RoleName;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Settings\ProfileDeleteRequest;
 use App\Http\Requests\Settings\ProfileUpdateRequest;
+use App\Models\User;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Spatie\Permission\Models\Role;
 
 class ProfileController extends Controller
 {
@@ -50,9 +56,31 @@ class ProfileController extends Controller
     {
         $user = $request->user();
 
-        Auth::logout();
+        DB::transaction(function () use ($user): void {
+            $adminRole = Role::query()
+                ->where('name', RoleName::Admin->value)
+                ->where('guard_name', 'web')
+                ->lockForUpdate()
+                ->first();
+            $adminRoleId = $adminRole?->getKey();
+            $adminIds = $adminRoleId === null
+                ? new Collection
+                : User::query()
+                    ->whereHas('roles', fn ($query) => $query->whereKey($adminRoleId))
+                    ->select('users.id')
+                    ->lockForUpdate()
+                    ->pluck('users.id');
 
-        $user->delete();
+            if ($adminIds->contains($user->getKey()) && $adminIds->count() <= 1) {
+                throw ValidationException::withMessages([
+                    'password' => 'Ultimul administrator nu își poate șterge contul.',
+                ]);
+            }
+
+            User::query()->whereKey($user->getKey())->lockForUpdate()->firstOrFail()->delete();
+        });
+
+        Auth::logout();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

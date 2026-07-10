@@ -4,11 +4,15 @@ namespace App\Services\PmBoard;
 
 use App\Models\User;
 use App\Models\WeeklyPlan;
+use App\Services\Audit\AuditLogger;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 class WeeklyPlanningService
 {
+    public function __construct(private readonly AuditLogger $audit) {}
+
     /**
      * @param array{
      *     project_id: int,
@@ -27,6 +31,7 @@ class WeeklyPlanningService
                 ->whereDate('week_start', $data['week_start'])
                 ->lockForUpdate()
                 ->first();
+            $before = $plan === null ? [] : $this->snapshot($plan->load('allocations'));
 
             if (($plan === null && $data['version'] !== null)
                 || ($plan !== null && $data['version'] !== $plan->version)) {
@@ -73,8 +78,24 @@ class WeeklyPlanningService
             }
 
             $plan->touch();
+            $plan->load('allocations.person');
+            $this->audit->log($user, $plan, 'weekly_plan.upserted', $before, $this->snapshot($plan));
 
-            return $plan->load('allocations.person');
+            return $plan;
         });
+    }
+
+    /** @return array<string, mixed> */
+    private function snapshot(WeeklyPlan $plan): array
+    {
+        return [
+            'selected' => $plan->selected,
+            'version' => $plan->version,
+            'week_start' => CarbonImmutable::parse($plan->week_start)->toDateString(),
+            'allocations' => $plan->allocations->map(fn ($allocation): array => [
+                'person_id' => $allocation->person_id,
+                'hours' => (float) $allocation->hours,
+            ])->values()->all(),
+        ];
     }
 }

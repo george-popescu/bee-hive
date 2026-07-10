@@ -72,7 +72,7 @@ final class TimeEntrySynchronizer
                 $people->put($clickUpUserId, $person);
             }
 
-            if ($person?->is_external && ! $person->active) {
+            if ($person?->is_external && ! $person->active && ! $person->manually_inactive) {
                 $person->update(['active' => true]);
             }
             $projectId = $task === null

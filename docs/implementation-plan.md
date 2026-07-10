@@ -260,6 +260,18 @@ Boardul generic reproduce regulile raportului de referință „La Depozit” at
 
 Aplicația este pregătită pentru utilizare internă în producție, cu permisiuni, audit, monitorizare și procedură de recuperare definite.
 
+### Status implementare — 11 iulie 2026
+
+- Finalizat: modulul Administrare centralizează echipa, configurația proiectelor și a boardurilor, PM-ii, utilizatorii, rolurile, permisiunile și setările operaționale.
+- Finalizat: rolurile și permisiunile Spatie pot fi reconfigurate de utilizatorii autorizați, cu protecții pentru ultimul Admin și pentru permisiunile administrative critice.
+- Finalizat: identitățile și datele sincronizate din ClickUp rămân read-only; formularele administrative modifică numai câmpurile operaționale deținute de aplicație.
+- Finalizat: jurnal de audit pentru alocări lunare, planificări săptămânale și schimbările administrative, cu actor, subiect și valorile înainte/după.
+- Finalizat: backup PostgreSQL zilnic în format custom, retenție configurabilă, scheduler, permisiuni restrictive și runbook pentru deploy, restore, rollback și procesele de producție.
+- Hardening: autorizare server-side pe fiecare endpoint, validări stricte, throttling pentru mutațiile administrative, optimistic locking pentru planificarea PM și păstrarea append-only a ajustărilor de realizat.
+- Verificat: 148 teste / 1.166 aserțiuni, PHPStan, Pint, Prettier, ESLint, TypeScript, build, rute, scheduler, migrații și toate secțiunile Administrare în browser, fără erori în consolă.
+- Precondiție de mediu: serverul de producție trebuie să aibă PostgreSQL client sau `PG_DUMP_BINARY` configurat; stația locală actuală nu are încă binarul `pg_dump`.
+- Validare externă rămasă: sincronizarea live a pontajelor va fi reverificată după obținerea unui token ClickUp cu acces la întregul workspace; integrarea rămâne read-only.
+
 ---
 
 ## Funcționalități propuse pentru faza a doua

@@ -13,3 +13,9 @@ Schedule::job(new SyncClickUpWorkspace)
     ->hourly()
     ->withoutOverlapping(30)
     ->onOneServer();
+
+Schedule::command('db:backup')
+    ->dailyAt('02:15')
+    ->withoutOverlapping(120)
+    ->onOneServer()
+    ->runInBackground();
