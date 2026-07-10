@@ -228,6 +228,17 @@ Boardul reproduce comportamentul T&M agreat și valorile ClickUp pentru perioada
 
 Boardul generic reproduce regulile raportului de referință „La Depozit” atunci când proiectul folosește acel template/configurare, iar selecțiile și alocările sunt persistente și disponibile utilizatorilor autorizați. Alte proiecte pot avea propriile configurări fără logică hardcodată.
 
+### Status implementare — 11 iulie 2026
+
+- Finalizat: template-ul `Livrabile / Fixed` forțează perioada săptămânală și activează secțiunile Săptămâna anterioară, În progres, Planificare resurse și Gantt, fără a schimba boardul T&M.
+- Finalizat: selecția taskurilor pentru săptămâna următoare și orele per resursă/task sunt persistate intern, separat pentru fiecare săptămână, cu audit de creare/modificare și salvare tranzacțională.
+- Finalizat: protecție optimistic-locking la editări concurente; o versiune depășită primește `409 Conflict` și nu suprascrie planul nou.
+- Finalizat: capacitate săptămânală configurabilă per persoană, totaluri planificate/disponibile și semnalizare pentru supra-alocare.
+- Finalizat: excluderi configurabile pentru taskurile recurente; acestea dispar numai din În progres/planificare, dar rămân în istoricul lucrat și în datele ClickUp.
+- Finalizat: Gantt cronologic pe 8 săptămâni, cu intervale start/deadline, statusuri semantice, taskuri selectate și marcaj pentru săptămâna curentă.
+- Configurație inițială: proiectul de referință „La Depozit” primește lista de excluderi, pool-ul de resurse și capacitățile confirmate de Simona ca date configurabile, nu ca logică globală.
+- Verificat: 125 teste / 966 aserțiuni, PHPStan, Pint, Prettier, ESLint, TypeScript, build și flux browser complet (selectare persistentă, pool de 6 resurse, sumar capacitate și Gantt), fără erori în consolă.
+
 ---
 
 ## Milestone 7 — Administrare și hardening

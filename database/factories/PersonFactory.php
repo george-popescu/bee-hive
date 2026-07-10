@@ -30,6 +30,7 @@ class PersonFactory extends Factory
                 'UX Designer',
             ]),
             'default_monthly_capacity_hours' => fake()->randomElement([120, 138, 140, 160]),
+            'weekly_capacity_hours' => null,
             'hourly_rate' => fake()->randomFloat(2, 25, 150),
             'is_external' => false,
             'active' => true,

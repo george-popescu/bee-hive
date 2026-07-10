@@ -7,6 +7,7 @@ use App\Http\Controllers\ClickUpSyncController;
 use App\Http\Controllers\ManagementController;
 use App\Http\Controllers\PmBoardController;
 use App\Http\Controllers\TeamLeadController;
+use App\Http\Controllers\WeeklyPlanningController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -25,6 +26,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('clickup/sync', [ClickUpSyncController::class, 'store'])
         ->middleware('can:'.PermissionName::SyncClickUp->value)
         ->name('clickup_sync.store');
+    Route::put('weekly-planning', [WeeklyPlanningController::class, 'upsert'])
+        ->middleware('can:'.PermissionName::ManagePmPlanning->value)
+        ->name('weekly_planning.upsert');
     Route::put('allocations', [AllocationController::class, 'upsert'])
         ->middleware('can:'.PermissionName::ManageAllocations->value)
         ->name('allocations.upsert');

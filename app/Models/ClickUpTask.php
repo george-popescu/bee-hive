@@ -59,6 +59,12 @@ class ClickUpTask extends Model
         return $this->hasMany(TimeEntry::class);
     }
 
+    /** @return HasMany<WeeklyPlan, $this> */
+    public function weeklyPlans(): HasMany
+    {
+        return $this->hasMany(WeeklyPlan::class);
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {

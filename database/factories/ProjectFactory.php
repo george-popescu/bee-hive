@@ -25,7 +25,8 @@ class ProjectFactory extends Factory
             'client' => fake()->company(),
             'name' => fake()->unique()->words(3, true),
             'folder_name' => fake()->words(3, true),
-            'contract_type' => fake()->randomElement(ProjectBoardTemplate::cases()),
+            'contract_type' => ProjectBoardTemplate::TimeAndMaterials,
+            'board_config' => null,
             'board_visible' => true,
             'active' => true,
         ];

@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'email',
     'job_role',
     'default_monthly_capacity_hours',
+    'weekly_capacity_hours',
     'hourly_rate',
     'is_external',
     'active',
@@ -84,11 +85,18 @@ class Person extends Model
         return $this->hasMany(ActualAdjustment::class);
     }
 
+    /** @return HasMany<WeeklyPlanAllocation, $this> */
+    public function weeklyPlanAllocations(): HasMany
+    {
+        return $this->hasMany(WeeklyPlanAllocation::class);
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
         return [
             'default_monthly_capacity_hours' => 'decimal:2',
+            'weekly_capacity_hours' => 'decimal:2',
             'hourly_rate' => 'decimal:2',
             'is_external' => 'boolean',
             'active' => 'boolean',

@@ -1,13 +1,17 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, useHttp } from '@inertiajs/react';
 import {
     ArrowLeft,
     ArrowRight,
     ExternalLink,
     LayoutDashboard,
     RefreshCw,
+    Save,
+    Star,
 } from 'lucide-react';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
+import { toast } from 'sonner';
 import { store as syncClickUp } from '@/actions/App/Http/Controllers/ClickUpSyncController';
+import { upsert as upsertWeeklyPlanning } from '@/actions/App/Http/Controllers/WeeklyPlanningController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,6 +21,8 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import {
     Select,
     SelectContent,
@@ -71,6 +77,53 @@ type BoardTask = {
     startDate: string | null;
     dueDate: string | null;
 };
+type PlanningAllocation = { personId: number; name: string; hours: number };
+type PlanningRow = {
+    taskId: number;
+    selected: boolean;
+    updatedAt: string | null;
+    version: number | null;
+    totalHours: number;
+    allocations: PlanningAllocation[];
+};
+type PlanningResource = {
+    id: number;
+    name: string;
+    jobRole: string | null;
+    weeklyCapacityHours: number;
+};
+type Planning = {
+    weekStart: string;
+    plans: PlanningRow[];
+    resources: PlanningResource[];
+    resourceTotals: Array<{
+        personId: number;
+        plannedHours: number;
+        weeklyCapacityHours: number;
+        remainingHours: number;
+    }>;
+};
+type Gantt = {
+    weeks: Array<{
+        key: string;
+        label: string;
+        start: string;
+        end: string;
+        isCurrent: boolean;
+    }>;
+    rows: Array<{
+        id: number;
+        name: string;
+        url: string;
+        status: string;
+        owners: string[];
+        estimateHours: number | null;
+        progress: number | null;
+        startDate: string | null;
+        dueDate: string | null;
+        selected: boolean;
+    }>;
+};
 type Props = {
     projects: Project[];
     managers: Array<{ id: number; name: string }>;
@@ -80,6 +133,8 @@ type Props = {
     workedTasks: BoardTask[];
     upcomingTasks: BoardTask[];
     peopleWorked: Array<{ name: string; hours: number; tasks: number }>;
+    planning: Planning | null;
+    gantt: Gantt | null;
     kpis: {
         plannedHours: number;
         actualHours: number;
@@ -96,7 +151,19 @@ type Props = {
     } | null;
     permissions: { managePlanning: boolean; syncClickUp: boolean };
 };
-type Section = 'summary' | 'worked' | 'upcoming' | 'people';
+type Section =
+    'summary' | 'worked' | 'upcoming' | 'people' | 'planning' | 'gantt';
+type WeeklyPlanningPayload = {
+    project_id: number;
+    click_up_task_id: number;
+    week_start: string;
+    selected: boolean;
+    allocations: Array<{ person_id: number; hours: number }>;
+    version: number | null;
+};
+type WeeklyPlanningResponse = {
+    plan: { id: number; selected: boolean; version: number; updatedAt: string };
+};
 
 function hours(value: number | null): string {
     return value === null
@@ -172,6 +239,214 @@ function EmptyRow({ columns, label }: { columns: number; label: string }) {
     );
 }
 
+function DeliverableTaskRows({
+    task,
+    projectId,
+    planning,
+    editable,
+}: {
+    task: BoardTask;
+    projectId: number;
+    planning: Planning;
+    editable: boolean;
+}) {
+    const plan = planning.plans.find((item) => item.taskId === task.id);
+    const [selected, setSelected] = useState(plan?.selected ?? false);
+    const [confirmedSelected, setConfirmedSelected] = useState(
+        plan?.selected ?? false,
+    );
+    const [version, setVersion] = useState(plan?.version ?? null);
+    const [drafts, setDrafts] = useState<Record<number, string>>(
+        Object.fromEntries(
+            (plan?.allocations ?? []).map((allocation) => [
+                allocation.personId,
+                String(allocation.hours),
+            ]),
+        ),
+    );
+    const form = useHttp<WeeklyPlanningPayload, WeeklyPlanningResponse>(
+        upsertWeeklyPlanning(),
+        {
+            project_id: projectId,
+            click_up_task_id: task.id,
+            week_start: planning.weekStart,
+            selected,
+            allocations:
+                plan?.allocations.map((allocation) => ({
+                    person_id: allocation.personId,
+                    hours: allocation.hours,
+                })) ?? [],
+            version,
+        },
+    );
+    const save = (nextSelected = selected) => {
+        const allocations = planning.resources.map((resource) => ({
+            person_id: resource.id,
+            hours: Number((drafts[resource.id] ?? '').replace(',', '.')) || 0,
+        }));
+        form.setData({
+            project_id: projectId,
+            click_up_task_id: task.id,
+            week_start: planning.weekStart,
+            selected: nextSelected,
+            allocations,
+            version,
+        });
+        const rollback = () => {
+            setSelected(confirmedSelected);
+            router.reload({ only: ['planning', 'gantt'] });
+        };
+        void form
+            .put(upsertWeeklyPlanning.url(), {
+                onSuccess: (response) => {
+                    setSelected(response.plan.selected);
+                    setConfirmedSelected(response.plan.selected);
+                    setVersion(response.plan.version);
+                    toast.success('Planificarea săptămânală a fost salvată.');
+                    router.reload({ only: ['planning', 'gantt'] });
+                },
+                onHttpException: () => {
+                    rollback();
+                    toast.error(
+                        'Planificarea s-a schimbat între timp. Reîncarcă și încearcă din nou.',
+                    );
+                },
+                onError: () => {
+                    rollback();
+                    toast.error('Planificarea nu a putut fi salvată.');
+                },
+                onNetworkError: () => {
+                    rollback();
+                    toast.error(
+                        'Conexiunea a eșuat. Modificările nu s-au salvat.',
+                    );
+                },
+            })
+            .catch(() => undefined);
+    };
+
+    return (
+        <Fragment>
+            <TableRow className={selected ? 'bg-primary/5' : undefined}>
+                <TableCell>
+                    {editable ? (
+                        <Checkbox
+                            aria-label={`Planifică ${task.name}`}
+                            checked={selected}
+                            disabled={form.processing}
+                            onCheckedChange={(checked) => {
+                                const nextSelected = checked === true;
+                                setSelected(nextSelected);
+                                save(nextSelected);
+                            }}
+                        />
+                    ) : selected ? (
+                        <Star className="size-4 fill-warning text-warning" />
+                    ) : (
+                        '—'
+                    )}
+                </TableCell>
+                <TableCell>
+                    <a
+                        href={task.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium hover:underline"
+                    >
+                        {task.name}
+                    </a>
+                </TableCell>
+                <TableCell>{task.owners.join(', ') || 'Nealocat'}</TableCell>
+                <TableCell>
+                    <TaskStatus task={task} />
+                </TableCell>
+                <TableCell>{task.dueDate ?? '—'}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                    {hours(task.estimateHours)}
+                </TableCell>
+                <TableCell
+                    className={
+                        task.isOverrun
+                            ? 'text-right text-destructive tabular-nums'
+                            : 'text-right tabular-nums'
+                    }
+                >
+                    {hours(task.remainingHours)}
+                </TableCell>
+                <TableCell>
+                    <Progress task={task} />
+                </TableCell>
+            </TableRow>
+            {editable && selected && (
+                <TableRow className="bg-muted/30">
+                    <TableCell colSpan={8}>
+                        <div className="flex flex-wrap items-end gap-3 py-2">
+                            {planning.resources.map((resource) => (
+                                <label
+                                    key={resource.id}
+                                    className="grid gap-1 text-xs text-muted-foreground"
+                                >
+                                    {resource.name}
+                                    <Input
+                                        className="h-8 w-28"
+                                        inputMode="decimal"
+                                        min={0}
+                                        max={168}
+                                        step={0.25}
+                                        type="number"
+                                        value={drafts[resource.id] ?? ''}
+                                        onChange={(event) =>
+                                            setDrafts((current) => ({
+                                                ...current,
+                                                [resource.id]:
+                                                    event.target.value,
+                                            }))
+                                        }
+                                        placeholder="0h"
+                                    />
+                                </label>
+                            ))}
+                            <Button
+                                size="sm"
+                                disabled={form.processing}
+                                onClick={() => save()}
+                            >
+                                <Save /> Salvează orele
+                            </Button>
+                        </div>
+                    </TableCell>
+                </TableRow>
+            )}
+        </Fragment>
+    );
+}
+
+function ganttCellClass(status: string): string {
+    const normalized = status.toLocaleLowerCase('ro');
+
+    if (
+        normalized.includes('done') ||
+        normalized.includes('complete') ||
+        normalized.includes('closed')
+    ) {
+        return 'bg-success/70';
+    }
+
+    if (
+        normalized.includes('progress') ||
+        normalized.includes('review') ||
+        normalized.includes('qa')
+    ) {
+        return 'bg-primary/70';
+    }
+
+    if (normalized.includes('pending') || normalized.includes('ready')) {
+        return 'bg-warning/70';
+    }
+
+    return 'bg-muted-foreground/25';
+}
+
 export default function PmBoard({
     projects,
     managers,
@@ -181,6 +456,8 @@ export default function PmBoard({
     workedTasks,
     upcomingTasks,
     peopleWorked,
+    planning,
+    gantt,
     kpis,
     sync,
     permissions,
@@ -190,6 +467,14 @@ export default function PmBoard({
         'presentation',
     );
     const currentProjectId = selectedProject?.id ?? null;
+    const isDeliverables = selectedProject?.template === 'deliverables';
+    const activeSection = isDeliverables
+        ? section === 'summary' || section === 'people'
+            ? 'worked'
+            : section
+        : section === 'planning' || section === 'gantt'
+          ? 'summary'
+          : section;
     const navigate = (
         project: number | null,
         periodType = period.type,
@@ -372,26 +657,32 @@ export default function PmBoard({
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
-                                    <ToggleGroup
-                                        type="single"
-                                        variant="outline"
-                                        value={period.type}
-                                        onValueChange={(value) => {
-                                            if (value) {
-                                                navigate(
-                                                    currentProjectId,
-                                                    value as Period['type'],
-                                                );
-                                            }
-                                        }}
-                                    >
-                                        <ToggleGroupItem value="week">
-                                            Săptămână
-                                        </ToggleGroupItem>
-                                        <ToggleGroupItem value="month">
-                                            Lună
-                                        </ToggleGroupItem>
-                                    </ToggleGroup>
+                                    {isDeliverables ? (
+                                        <Badge variant="secondary">
+                                            Board săptămânal
+                                        </Badge>
+                                    ) : (
+                                        <ToggleGroup
+                                            type="single"
+                                            variant="outline"
+                                            value={period.type}
+                                            onValueChange={(value) => {
+                                                if (value) {
+                                                    navigate(
+                                                        currentProjectId,
+                                                        value as Period['type'],
+                                                    );
+                                                }
+                                            }}
+                                        >
+                                            <ToggleGroupItem value="week">
+                                                Săptămână
+                                            </ToggleGroupItem>
+                                            <ToggleGroupItem value="month">
+                                                Lună
+                                            </ToggleGroupItem>
+                                        </ToggleGroup>
+                                    )}
                                     <Button
                                         variant="outline"
                                         size="icon"
@@ -465,7 +756,7 @@ export default function PmBoard({
                         <ToggleGroup
                             type="single"
                             variant="outline"
-                            value={section}
+                            value={activeSection}
                             onValueChange={(value) => {
                                 if (value) {
                                     setSection(value as Section);
@@ -473,21 +764,36 @@ export default function PmBoard({
                             }}
                             className="flex-wrap justify-start"
                         >
-                            <ToggleGroupItem value="summary">
-                                Sumar
-                            </ToggleGroupItem>
+                            {!isDeliverables && (
+                                <ToggleGroupItem value="summary">
+                                    Sumar
+                                </ToggleGroupItem>
+                            )}
                             <ToggleGroupItem value="worked">
-                                Lucrat în perioadă
+                                {isDeliverables
+                                    ? '① Săptămâna anterioară'
+                                    : 'Lucrat în perioadă'}
                             </ToggleGroupItem>
                             <ToggleGroupItem value="upcoming">
-                                Urmează
+                                {isDeliverables ? '② În progres' : 'Urmează'}
                             </ToggleGroupItem>
-                            <ToggleGroupItem value="people">
-                                Echipa activă
-                            </ToggleGroupItem>
+                            {isDeliverables ? (
+                                <>
+                                    <ToggleGroupItem value="planning">
+                                        ③ Planificare resurse
+                                    </ToggleGroupItem>
+                                    <ToggleGroupItem value="gantt">
+                                        Gantt
+                                    </ToggleGroupItem>
+                                </>
+                            ) : (
+                                <ToggleGroupItem value="people">
+                                    Echipa activă
+                                </ToggleGroupItem>
+                            )}
                         </ToggleGroup>
 
-                        {section === 'summary' && (
+                        {activeSection === 'summary' && (
                             <div className="grid gap-4 lg:grid-cols-2">
                                 <Card>
                                     <CardHeader>
@@ -568,7 +874,7 @@ export default function PmBoard({
                             </div>
                         )}
 
-                        {section === 'worked' && (
+                        {activeSection === 'worked' && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Taskuri lucrate</CardTitle>
@@ -650,19 +956,27 @@ export default function PmBoard({
                             </Card>
                         )}
 
-                        {section === 'upcoming' && (
+                        {activeSection === 'upcoming' && (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Taskuri active</CardTitle>
+                                    <CardTitle>
+                                        {isDeliverables
+                                            ? 'În progres și de făcut'
+                                            : 'Taskuri active'}
+                                    </CardTitle>
                                     <CardDescription>
-                                        Ownership, termen și efort rămas față de
-                                        estimarea ClickUp.
+                                        {isDeliverables
+                                            ? `Planificarea vizează săptămâna care începe la ${planning?.weekStart ?? '—'}. Taskurile recurente configurate sunt ascunse aici.`
+                                            : 'Ownership, termen și efort rămas față de estimarea ClickUp.'}
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="overflow-x-auto">
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
+                                                {isDeliverables && (
+                                                    <TableHead>Plan</TableHead>
+                                                )}
                                                 <TableHead>Task</TableHead>
                                                 <TableHead>Owner</TableHead>
                                                 <TableHead>Status</TableHead>
@@ -677,55 +991,78 @@ export default function PmBoard({
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {upcomingTasks.map((task) => (
-                                                <TableRow key={task.id}>
-                                                    <TableCell>
-                                                        <a
-                                                            href={task.url}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="font-medium hover:underline"
-                                                        >
-                                                            {task.name}
-                                                        </a>
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {task.owners.join(
-                                                            ', ',
-                                                        ) || 'Nealocat'}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <TaskStatus
-                                                            task={task}
-                                                        />
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {task.dueDate ?? '—'}
-                                                    </TableCell>
-                                                    <TableCell className="text-right tabular-nums">
-                                                        {hours(
-                                                            task.estimateHours,
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell
-                                                        className={
-                                                            task.isOverrun
-                                                                ? 'text-right text-destructive tabular-nums'
-                                                                : 'text-right tabular-nums'
-                                                        }
-                                                    >
-                                                        {hours(
-                                                            task.remainingHours,
-                                                        )}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Progress task={task} />
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))}
+                                            {isDeliverables && planning
+                                                ? upcomingTasks.map((task) => (
+                                                      <DeliverableTaskRows
+                                                          key={`${task.id}-${planning.plans.find((plan) => plan.taskId === task.id)?.updatedAt ?? 'new'}`}
+                                                          task={task}
+                                                          projectId={
+                                                              selectedProject.id
+                                                          }
+                                                          planning={planning}
+                                                          editable={
+                                                              displayMode ===
+                                                                  'edit' &&
+                                                              permissions.managePlanning
+                                                          }
+                                                      />
+                                                  ))
+                                                : upcomingTasks.map((task) => (
+                                                      <TableRow key={task.id}>
+                                                          <TableCell>
+                                                              <a
+                                                                  href={
+                                                                      task.url
+                                                                  }
+                                                                  target="_blank"
+                                                                  rel="noreferrer"
+                                                                  className="font-medium hover:underline"
+                                                              >
+                                                                  {task.name}
+                                                              </a>
+                                                          </TableCell>
+                                                          <TableCell>
+                                                              {task.owners.join(
+                                                                  ', ',
+                                                              ) || 'Nealocat'}
+                                                          </TableCell>
+                                                          <TableCell>
+                                                              <TaskStatus
+                                                                  task={task}
+                                                              />
+                                                          </TableCell>
+                                                          <TableCell>
+                                                              {task.dueDate ??
+                                                                  '—'}
+                                                          </TableCell>
+                                                          <TableCell className="text-right tabular-nums">
+                                                              {hours(
+                                                                  task.estimateHours,
+                                                              )}
+                                                          </TableCell>
+                                                          <TableCell
+                                                              className={
+                                                                  task.isOverrun
+                                                                      ? 'text-right text-destructive tabular-nums'
+                                                                      : 'text-right tabular-nums'
+                                                              }
+                                                          >
+                                                              {hours(
+                                                                  task.remainingHours,
+                                                              )}
+                                                          </TableCell>
+                                                          <TableCell>
+                                                              <Progress
+                                                                  task={task}
+                                                              />
+                                                          </TableCell>
+                                                      </TableRow>
+                                                  ))}
                                             {upcomingTasks.length === 0 && (
                                                 <EmptyRow
-                                                    columns={7}
+                                                    columns={
+                                                        isDeliverables ? 8 : 7
+                                                    }
                                                     label="Nu există taskuri active."
                                                 />
                                             )}
@@ -735,7 +1072,7 @@ export default function PmBoard({
                             </Card>
                         )}
 
-                        {section === 'people' && (
+                        {activeSection === 'people' && (
                             <Card>
                                 <CardHeader>
                                     <CardTitle>Echipa activă</CardTitle>
@@ -775,6 +1112,213 @@ export default function PmBoard({
                                                 <EmptyRow
                                                     columns={3}
                                                     label="Nu există persoane cu pontaje în perioada aleasă."
+                                                />
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {activeSection === 'planning' && planning && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>
+                                        Planificare resurse —{' '}
+                                        {planning.weekStart}
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Totalurile vin din orele alocate pe
+                                        taskurile bifate în „În progres”.
+                                        Capacitatea este configurabilă per
+                                        persoană.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="overflow-x-auto">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Resursă</TableHead>
+                                                <TableHead>Rol</TableHead>
+                                                <TableHead className="text-right">
+                                                    Capacitate
+                                                </TableHead>
+                                                <TableHead className="text-right">
+                                                    Planificat
+                                                </TableHead>
+                                                <TableHead className="text-right">
+                                                    Disponibil
+                                                </TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {planning.resources.map(
+                                                (resource) => {
+                                                    const total =
+                                                        planning.resourceTotals.find(
+                                                            (item) =>
+                                                                item.personId ===
+                                                                resource.id,
+                                                        );
+                                                    const overloaded =
+                                                        (total?.remainingHours ??
+                                                            resource.weeklyCapacityHours) <
+                                                        0;
+
+                                                    return (
+                                                        <TableRow
+                                                            key={resource.id}
+                                                        >
+                                                            <TableCell className="font-medium">
+                                                                {resource.name}
+                                                            </TableCell>
+                                                            <TableCell className="text-muted-foreground">
+                                                                {resource.jobRole ??
+                                                                    '—'}
+                                                            </TableCell>
+                                                            <TableCell className="text-right tabular-nums">
+                                                                {hours(
+                                                                    resource.weeklyCapacityHours,
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell className="text-right tabular-nums">
+                                                                {hours(
+                                                                    total?.plannedHours ??
+                                                                        0,
+                                                                )}
+                                                            </TableCell>
+                                                            <TableCell
+                                                                className={
+                                                                    overloaded
+                                                                        ? 'text-right text-destructive tabular-nums'
+                                                                        : 'text-right tabular-nums'
+                                                                }
+                                                            >
+                                                                {hours(
+                                                                    total?.remainingHours ??
+                                                                        resource.weeklyCapacityHours,
+                                                                )}
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    );
+                                                },
+                                            )}
+                                            {planning.resources.length ===
+                                                0 && (
+                                                <EmptyRow
+                                                    columns={5}
+                                                    label="Nu există resurse interne active."
+                                                />
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </CardContent>
+                            </Card>
+                        )}
+
+                        {activeSection === 'gantt' && gantt && (
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Gantt livrabile</CardTitle>
+                                    <CardDescription>
+                                        Intervalele provin din datele
+                                        start/deadline ClickUp; săptămâna
+                                        curentă este marcată distinct.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="overflow-x-auto">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="sticky left-0 min-w-72 bg-card">
+                                                    Task
+                                                </TableHead>
+                                                {gantt.weeks.map((week) => (
+                                                    <TableHead
+                                                        key={week.key}
+                                                        className={
+                                                            week.isCurrent
+                                                                ? 'min-w-24 border-x-2 border-destructive text-center'
+                                                                : 'min-w-24 text-center'
+                                                        }
+                                                    >
+                                                        {week.label}
+                                                    </TableHead>
+                                                ))}
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {gantt.rows.map((row) => (
+                                                <TableRow key={row.id}>
+                                                    <TableCell className="sticky left-0 bg-card">
+                                                        <div className="flex items-center gap-2">
+                                                            {row.selected && (
+                                                                <Star className="size-4 fill-warning text-warning" />
+                                                            )}
+                                                            <a
+                                                                href={row.url}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="line-clamp-1 font-medium hover:underline"
+                                                            >
+                                                                {row.name}
+                                                            </a>
+                                                        </div>
+                                                        <div className="mt-1 text-xs text-muted-foreground">
+                                                            {row.owners.join(
+                                                                ', ',
+                                                            ) ||
+                                                                'Nealocat'}{' '}
+                                                            ·{' '}
+                                                            {hours(
+                                                                row.estimateHours,
+                                                            )}{' '}
+                                                            ·{' '}
+                                                            {row.progress ===
+                                                            null
+                                                                ? '—'
+                                                                : `${row.progress}%`}
+                                                        </div>
+                                                    </TableCell>
+                                                    {gantt.weeks.map((week) => {
+                                                        const start =
+                                                            row.startDate ??
+                                                            row.dueDate;
+                                                        const end =
+                                                            row.dueDate ??
+                                                            row.startDate;
+                                                        const active =
+                                                            start !== null &&
+                                                            end !== null &&
+                                                            start <= week.end &&
+                                                            end >= week.start;
+
+                                                        return (
+                                                            <TableCell
+                                                                key={week.key}
+                                                                className={
+                                                                    week.isCurrent
+                                                                        ? 'border-x-2 border-destructive p-2'
+                                                                        : 'p-2'
+                                                                }
+                                                            >
+                                                                {active && (
+                                                                    <div
+                                                                        className={`h-6 rounded ${ganttCellClass(row.status)}`}
+                                                                        title={`${row.status}: ${start} – ${end}`}
+                                                                    />
+                                                                )}
+                                                            </TableCell>
+                                                        );
+                                                    })}
+                                                </TableRow>
+                                            ))}
+                                            {gantt.rows.length === 0 && (
+                                                <EmptyRow
+                                                    columns={
+                                                        gantt.weeks.length + 1
+                                                    }
+                                                    label="Taskurile nu au încă date start/deadline."
                                                 />
                                             )}
                                         </TableBody>

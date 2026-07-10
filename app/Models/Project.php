@@ -10,7 +10,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/** @property ProjectBoardTemplate|null $contract_type */
+/**
+ * @property ProjectBoardTemplate|null $contract_type
+ * @property array<string, mixed>|null $board_config
+ */
 #[Fillable([
     'clickup_space_id',
     'clickup_folder_id',
@@ -19,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'name',
     'folder_name',
     'contract_type',
+    'board_config',
     'board_visible',
     'active',
 ])]
@@ -70,6 +74,12 @@ class Project extends Model
         return $this->hasMany(ActualAdjustment::class);
     }
 
+    /** @return HasMany<WeeklyPlan, $this> */
+    public function weeklyPlans(): HasMany
+    {
+        return $this->hasMany(WeeklyPlan::class);
+    }
+
     /** @return array<string, string> */
     protected function casts(): array
     {
@@ -77,6 +87,7 @@ class Project extends Model
             'board_visible' => 'boolean',
             'active' => 'boolean',
             'contract_type' => ProjectBoardTemplate::class,
+            'board_config' => 'array',
         ];
     }
 }

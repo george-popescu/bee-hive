@@ -10,6 +10,7 @@ use App\Models\Project;
 use App\Models\SyncRun;
 use App\Models\TimeEntry;
 use App\Models\User;
+use App\Models\WeeklyPlan;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
@@ -34,7 +35,7 @@ class PmBoardData
         }
 
         $allProjects = Project::query()
-            ->select(['id', 'client', 'name', 'contract_type'])
+            ->select(['id', 'client', 'name', 'contract_type', 'board_config'])
             ->whereIn('id', $projectIds)
             ->with(['managers:id,name'])
             ->orderBy('client')
@@ -52,6 +53,10 @@ class PmBoardData
             ? $projects->first()
             : $projects->firstWhere('id', $selectedProjectId);
         $period = $period === 'month' ? 'month' : 'week';
+
+        if ($selectedProject instanceof Project && $selectedProject->contract_type === ProjectBoardTemplate::Deliverables) {
+            $period = 'week';
+        }
         [$rangeStart, $rangeEnd] = $this->range($anchor, $period);
         $sync = $this->syncStatus();
 
@@ -68,6 +73,8 @@ class PmBoardData
                 'workedTasks' => [],
                 'upcomingTasks' => [],
                 'peopleWorked' => [],
+                'planning' => null,
+                'gantt' => null,
                 'kpis' => [
                     'plannedHours' => 0.0,
                     'actualHours' => 0.0,
@@ -111,7 +118,7 @@ class PmBoardData
             ->get();
         $taskIds = $tasks->modelKeys();
         $periodEntryRows = TimeEntry::query()
-            ->select(['id', 'click_up_task_id', 'person_id', 'person_name', 'duration_seconds', 'started_at'])
+            ->select(['id', 'click_up_task_id', 'person_id', 'clickup_user_id', 'person_name', 'duration_seconds', 'started_at'])
             ->whereIn('click_up_task_id', $taskIds)
             ->whereBetween('started_at', [$rangeStart, $rangeEnd])
             ->with(['person:id,name'])
@@ -131,11 +138,25 @@ class PmBoardData
             ->filter(fn (array $task): bool => $task['periodHours'] > 0)
             ->sortByDesc('periodHours')
             ->values();
+        $excludedTaskIds = $this->excludedTaskIds($selectedProject);
         $upcomingTasks = $taskRows
             ->filter(fn (array $task): bool => $task['active'] && ! $task['isDone'])
             ->sortBy(fn (array $task): string => $task['statusGroup'].'|'.($task['dueDate'] ?? '9999-12-31').'|'.$task['name'])
             ->values();
+
+        if ($selectedProject->contract_type === ProjectBoardTemplate::Deliverables) {
+            $upcomingTasks = $upcomingTasks
+                ->reject(fn (array $task): bool => in_array($task['clickupId'], $excludedTaskIds, true))
+                ->values();
+        }
         $peopleWorked = $this->peopleWorked($periodEntryRows);
+        $isDeliverables = $selectedProject->contract_type === ProjectBoardTemplate::Deliverables;
+        $planning = $isDeliverables
+            ? $this->planningData($selectedProject, $upcomingTasks, $rangeEnd->addDay()->startOfDay())
+            : null;
+        $gantt = $isDeliverables
+            ? $this->ganttData($tasks, $taskRows, $planning, $rangeStart)
+            : null;
 
         return [
             'projects' => $projects->map(fn (Project $project): array => $this->projectData($project))->all(),
@@ -149,6 +170,8 @@ class PmBoardData
             'workedTasks' => $workedTasks->all(),
             'upcomingTasks' => $upcomingTasks->all(),
             'peopleWorked' => $peopleWorked,
+            'planning' => $planning,
+            'gantt' => $gantt,
             'kpis' => [
                 'plannedHours' => round($workedTasks->sum('estimateHours'), 2),
                 'actualHours' => round($workedTasks->sum('periodHours'), 2),
@@ -265,6 +288,158 @@ class PmBoardData
         }
 
         return 'entry:'.$entry->getKey();
+    }
+
+    /** @return list<string> */
+    private function excludedTaskIds(Project $project): array
+    {
+        $ids = data_get($project->board_config, 'excluded_task_ids', []);
+
+        if (! is_array($ids)) {
+            return [];
+        }
+
+        return array_values(array_filter($ids, fn (mixed $id): bool => is_string($id) && $id !== ''));
+    }
+
+    /**
+     * @param  Collection<int, covariant array<string, mixed>>  $upcomingTasks
+     * @return array<string, mixed>
+     */
+    private function planningData(Project $project, Collection $upcomingTasks, CarbonImmutable $weekStart): array
+    {
+        $taskIds = $upcomingTasks->pluck('id')->map(fn (mixed $id): int => (int) $id)->all();
+        $persistedPlans = WeeklyPlan::query()
+            ->whereBelongsTo($project)
+            ->whereDate('week_start', $weekStart)
+            ->whereIn('click_up_task_id', $taskIds)
+            ->with(['allocations.person:id,name'])
+            ->get()
+            ->keyBy('click_up_task_id');
+        $plans = $upcomingTasks->map(function (array $task) use ($persistedPlans): array {
+            $plan = $persistedPlans->get($task['id']);
+            $allocations = [];
+
+            if ($plan instanceof WeeklyPlan) {
+                foreach ($plan->allocations as $allocation) {
+                    $allocations[] = [
+                        'personId' => $allocation->person_id,
+                        'name' => $allocation->person->name,
+                        'hours' => round((float) $allocation->hours, 2),
+                    ];
+                }
+            }
+
+            return [
+                'taskId' => $task['id'],
+                'selected' => $plan->selected ?? false,
+                'version' => $plan?->version,
+                'updatedAt' => $plan?->updated_at?->toIso8601String(),
+                'totalHours' => round((float) array_sum(array_column($allocations, 'hours')), 2),
+                'allocations' => $allocations,
+            ];
+        })->values();
+        $excludedResourceIds = data_get($project->board_config, 'excluded_resource_ids', []);
+        $allowedResourceNames = data_get($project->board_config, 'allowed_resource_names', []);
+        $resourceRoles = data_get($project->board_config, 'resource_roles', []);
+        $resources = Person::query()
+            ->select(['id', 'name', 'job_role', 'default_monthly_capacity_hours', 'weekly_capacity_hours'])
+            ->where('active', true)
+            ->where('is_external', false)
+            ->when(is_array($excludedResourceIds) && $excludedResourceIds !== [], fn ($query) => $query->whereNotIn('id', $excludedResourceIds))
+            ->when(is_array($allowedResourceNames) && $allowedResourceNames !== [], fn ($query) => $query->whereIn('name', $allowedResourceNames))
+            ->orderBy('name')
+            ->get()
+            ->map(function (Person $person) use ($resourceRoles): array {
+                $weeklyCapacity = $person->weekly_capacity_hours === null
+                    ? (float) $person->default_monthly_capacity_hours * 12 / 52
+                    : (float) $person->weekly_capacity_hours;
+                $configuredRole = is_array($resourceRoles) ? ($resourceRoles[$person->name] ?? null) : null;
+
+                return [
+                    'id' => $person->getKey(),
+                    'name' => $person->name,
+                    'jobRole' => is_string($configuredRole) ? $configuredRole : $person->job_role,
+                    'weeklyCapacityHours' => round($weeklyCapacity, 2),
+                ];
+            })
+            ->values();
+        $selectedPlans = $plans->where('selected', true);
+        $resourceTotals = $resources->map(function (array $resource) use ($selectedPlans): array {
+            $planned = $selectedPlans->sum(fn (array $plan): float => (float) collect($plan['allocations'])
+                ->where('personId', $resource['id'])
+                ->sum('hours'));
+
+            return [
+                'personId' => $resource['id'],
+                'plannedHours' => round($planned, 2),
+                'weeklyCapacityHours' => $resource['weeklyCapacityHours'],
+                'remainingHours' => round($resource['weeklyCapacityHours'] - $planned, 2),
+            ];
+        })->values();
+
+        return [
+            'weekStart' => $weekStart->toDateString(),
+            'plans' => $plans->all(),
+            'resources' => $resources->all(),
+            'resourceTotals' => $resourceTotals->all(),
+        ];
+    }
+
+    /**
+     * @param  EloquentCollection<int, ClickUpTask>  $tasks
+     * @param  Collection<int, array<string, mixed>>  $taskRows
+     * @param  array<string, mixed>  $planning
+     * @return array<string, mixed>
+     */
+    private function ganttData(EloquentCollection $tasks, Collection $taskRows, array $planning, CarbonImmutable $rangeStart): array
+    {
+        $taskData = $taskRows->keyBy('id');
+        $selectedTaskIds = [];
+        $planningRows = $planning['plans'] ?? [];
+
+        if (is_array($planningRows)) {
+            foreach ($planningRows as $plan) {
+                if (is_array($plan) && ($plan['selected'] ?? false) === true && is_int($plan['taskId'] ?? null)) {
+                    $selectedTaskIds[] = $plan['taskId'];
+                }
+            }
+        }
+        $firstWeek = $rangeStart->subWeek()->startOfWeek();
+        $weeks = collect(range(0, 7))->map(function (int $offset) use ($firstWeek): array {
+            $start = $firstWeek->addWeeks($offset);
+            $end = $start->endOfWeek();
+
+            return [
+                'key' => $start->toDateString(),
+                'label' => $this->shortDate($start).'–'.$this->shortDate($end),
+                'start' => $start->toDateString(),
+                'end' => $end->toDateString(),
+                'isCurrent' => $start->isSameDay(CarbonImmutable::now()->startOfWeek()),
+            ];
+        });
+        $rows = $tasks
+            ->filter(fn (ClickUpTask $task): bool => $task->start_at !== null || $task->due_at !== null)
+            ->sortBy(fn (ClickUpTask $task): string => ($task->start_at?->toDateString() ?? '9999-12-31').'|'.($task->due_at?->toDateString() ?? '9999-12-31'))
+            ->map(function (ClickUpTask $task) use ($taskData, $selectedTaskIds): array {
+                $row = $taskData->get($task->getKey(), []);
+
+                return [
+                    'id' => $task->getKey(),
+                    'name' => $task->name,
+                    'url' => "https://app.clickup.com/t/{$task->clickup_task_id}",
+                    'status' => trim((string) $task->status) ?: 'fără status',
+                    'owners' => $task->assignees->pluck('name')->values()->all(),
+                    'estimateHours' => $row['estimateHours'] ?? null,
+                    'progress' => $row['progress'] ?? null,
+                    'startDate' => $task->start_at?->toDateString(),
+                    'dueDate' => $task->due_at?->toDateString(),
+                    'selected' => in_array($task->getKey(), $selectedTaskIds, true),
+                ];
+            })
+            ->values();
+
+        return ['weeks' => $weeks->all(), 'rows' => $rows->all()];
     }
 
     /** @return array{id: int, label: string, template: string, templateLabel: string, managerIds: list<int>} */
