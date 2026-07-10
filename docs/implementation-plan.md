@@ -49,7 +49,7 @@ Nivelul de reasoning folosit pentru arhitectură și implementare rămâne **Ext
 
 ### Condiție de finalizare
 
-Nu mai există decizii blocante pentru schema bazei de date. Reconcilierea din M1 a identificat însă două valori contradictorii în workbook-ul inițial; detaliile sunt păstrate în statusul milestone-ului.
+Nu mai există decizii blocante pentru schema bazei de date sau pentru importul inițial.
 
 ---
 
@@ -85,7 +85,8 @@ Rezultatele calculate coincid cu exemplele confirmate din dashboardurile actuale
 - Finalizat: ajustări append-only și corectare prin ajustare inversă legată de original.
 - Finalizat: comanda `capacity:import-workbook`, cu dry-run, import idempotent și oprire automată dacă totalurile de control nu coincid.
 - Verificare completă: lint, type-check, Pint, PHPStan și 65 de teste cu 228 de aserțiuni.
-- Decizie de date rămasă: pentru `Calin Stefanescu`, sheet-ul `Alocări` însumează `85h` în iulie 2026 și `0h` în august 2026, iar sheet-ul `Pe persoană` conține valori hardcodate `80h` și `80h`. Până la confirmarea sursei corecte, importul real nu scrie nimic în baza de date.
+- Decizie de date rezolvată: sheet-ul `Alocări` rămâne sursa canonică. Pentru `Calin Stefanescu`, controalele hardcodate din `Pe persoană` au fost corectate la `85h` în iulie 2026 și `0h` în august 2026.
+- Import inițial finalizat: toate cele 120 de totaluri persoană × lună coincid; PostgreSQL conține 15 persoane, 15 proiecte și 285 de alocări lunare.
 
 ---
 
