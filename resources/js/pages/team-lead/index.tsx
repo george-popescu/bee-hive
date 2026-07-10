@@ -1,7 +1,19 @@
-import { Head, useHttp } from '@inertiajs/react';
-import { Check, LoaderCircle, RotateCcw, UsersRound } from 'lucide-react';
-import { Fragment, useMemo, useState } from 'react';
+import { Head, useForm, useHttp } from '@inertiajs/react';
+import {
+    Check,
+    LoaderCircle,
+    Plus,
+    RotateCcw,
+    Undo2,
+    UsersRound,
+} from 'lucide-react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import { toast } from 'sonner';
+import {
+    reverse as reverseAdjustment,
+    store as storeAdjustment,
+} from '@/actions/App/Http/Controllers/ActualAdjustmentController';
 import { upsert } from '@/actions/App/Http/Controllers/AllocationController';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,7 +24,16 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -30,6 +51,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { index as teamLeadIndex } from '@/routes/team_lead';
 
@@ -41,20 +63,54 @@ type Person = {
     isExternal: boolean;
     capacity: Record<string, number>;
 };
-type Project = { id: number; label: string };
+type Project = {
+    id: number | null;
+    label: string;
+    internal: boolean;
+    active?: boolean;
+};
 type PlanRow = {
     key: string;
     person: Person;
-    project: Project;
+    project: Project & { id: number };
     role: string;
     hours: Record<string, number>;
+};
+type VarianceStatus =
+    'empty' | 'on-plan' | 'significant-variance' | 'neutral' | 'unplanned';
+type BoardMonth = {
+    planned: number;
+    actual: number | null;
+    status: VarianceStatus;
+};
+type BoardRow = {
+    key: string;
+    person: Person;
+    project: Project;
+    roles: string[];
+    months: Record<string, BoardMonth>;
+};
+type DisplayMode = 'plan' | 'actual' | 'comparison';
+type AdjustmentRecord = {
+    id: number;
+    person: string;
+    project: string;
+    month: string;
+    hoursDelta: number;
+    reason: string;
+    author: string;
+    createdAt: string;
+    isReversal: boolean;
+    isReversed: boolean;
 };
 type Props = {
     months: Month[];
     people: Array<Pick<Person, 'id' | 'name'>>;
-    projects: Project[];
+    projects: Array<Project & { id: number }>;
     roles: string[];
     planRows: PlanRow[];
+    comparisonRows: BoardRow[];
+    adjustments: AdjustmentRecord[];
     permissions: {
         manageAllocations: boolean;
         adjustActualHours: boolean;
@@ -70,6 +126,56 @@ type AllocationPayload = {
 type AllocationResponse = {
     allocation: { id: number; planned_hours: number; updated_at: string };
 };
+type AdjustmentPayload = {
+    person_id: number | '';
+    project_id: number | null;
+    internal_label: string;
+    month: string;
+    hours_delta: number | '';
+    reason: string;
+};
+type ReversalPayload = { reason: string };
+
+const varianceLabels: Record<VarianceStatus, string> = {
+    empty: 'Fără date',
+    'on-plan': 'În plan (±10%)',
+    'significant-variance': 'Abatere semnificativă (>25%)',
+    neutral: 'Abatere moderată',
+    unplanned: 'Ore neplanificate',
+};
+
+function formatHours(value: number | null): string {
+    if (value === null) {
+        return '—';
+    }
+
+    return value.toLocaleString('ro-RO', { maximumFractionDigits: 2 });
+}
+
+function classifyVariance(
+    planned: number,
+    actual: number | null,
+): VarianceStatus {
+    if (actual === null) {
+        return 'empty';
+    }
+
+    if (planned === 0) {
+        return actual > 0 ? 'unplanned' : 'empty';
+    }
+
+    const relativeVariance = Math.abs(actual - planned) / planned;
+
+    if (relativeVariance <= 0.1) {
+        return 'on-plan';
+    }
+
+    if (actual > planned * 1.25 || actual < planned * 0.75) {
+        return 'significant-variance';
+    }
+
+    return 'neutral';
+}
 
 function PlanHoursInput({
     row,
@@ -180,30 +286,807 @@ function PlanHoursInput({
     );
 }
 
+function PersonLabel({ person }: { person: Person }) {
+    return (
+        <span className="flex items-center gap-2">
+            {person.name}
+            {person.isExternal && <Badge variant="secondary">extern</Badge>}
+        </span>
+    );
+}
+
+function ProjectLabel({ project }: { project: Project }) {
+    return (
+        <span className="flex items-center gap-2">
+            {project.label}
+            {project.internal && <Badge variant="outline">intern</Badge>}
+        </span>
+    );
+}
+
+function VarianceValue({ month }: { month: BoardMonth }) {
+    const variant =
+        month.status === 'significant-variance' || month.status === 'unplanned'
+            ? 'destructive'
+            : month.status === 'on-plan'
+              ? 'success'
+              : month.status === 'empty'
+                ? 'outline'
+                : 'warning';
+
+    return (
+        <Badge variant={variant} title={varianceLabels[month.status]}>
+            {formatHours(month.actual)}
+        </Badge>
+    );
+}
+
+function PlanTable({
+    rows,
+    months,
+    canEdit,
+}: {
+    rows: PlanRow[];
+    months: Month[];
+    canEdit: boolean;
+}) {
+    const total = (subset: PlanRow[], month: string) =>
+        subset.reduce((sum, row) => sum + (row.hours[month] ?? 0), 0);
+
+    return (
+        <Table>
+            <TableHeader>
+                <TableRow>
+                    <TableHead className="sticky top-0 left-0 min-w-48 bg-card">
+                        Persoană
+                    </TableHead>
+                    <TableHead className="sticky top-0 min-w-64 bg-card">
+                        Proiect
+                    </TableHead>
+                    <TableHead className="sticky top-0 min-w-28 bg-card">
+                        Rol
+                    </TableHead>
+                    {months.map((month) => (
+                        <TableHead
+                            key={month.key}
+                            className="sticky top-0 min-w-32 bg-card text-right"
+                        >
+                            {month.label}
+                        </TableHead>
+                    ))}
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {rows.map((row, index) => {
+                    const firstForPerson =
+                        index === 0 ||
+                        rows[index - 1].person.id !== row.person.id;
+                    const lastForPerson =
+                        index === rows.length - 1 ||
+                        rows[index + 1].person.id !== row.person.id;
+                    const personRows = rows.filter(
+                        (candidate) => candidate.person.id === row.person.id,
+                    );
+
+                    return (
+                        <Fragment key={row.key}>
+                            <TableRow>
+                                <TableCell className="sticky left-0 bg-card font-medium">
+                                    {firstForPerson && (
+                                        <PersonLabel person={row.person} />
+                                    )}
+                                </TableCell>
+                                <TableCell>
+                                    <ProjectLabel project={row.project} />
+                                </TableCell>
+                                <TableCell>{row.role || '—'}</TableCell>
+                                {months.map((month) => (
+                                    <TableCell
+                                        key={month.key}
+                                        className="text-right"
+                                    >
+                                        <PlanHoursInput
+                                            row={row}
+                                            month={month.key}
+                                            canEdit={canEdit}
+                                        />
+                                    </TableCell>
+                                ))}
+                            </TableRow>
+                            {lastForPerson && (
+                                <TableRow className="bg-muted/40 font-medium">
+                                    <TableCell className="sticky left-0 bg-muted">
+                                        Total {row.person.name}
+                                    </TableCell>
+                                    <TableCell colSpan={2} />
+                                    {months.map((month) => (
+                                        <TableCell
+                                            key={month.key}
+                                            className="text-right tabular-nums"
+                                        >
+                                            {formatHours(
+                                                total(personRows, month.key),
+                                            )}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            )}
+                        </Fragment>
+                    );
+                })}
+            </TableBody>
+            <TableFooter>
+                <TableRow>
+                    <TableCell>Total general</TableCell>
+                    <TableCell colSpan={2} />
+                    {months.map((month) => (
+                        <TableCell
+                            key={month.key}
+                            className="text-right tabular-nums"
+                        >
+                            {formatHours(total(rows, month.key))}
+                        </TableCell>
+                    ))}
+                </TableRow>
+            </TableFooter>
+        </Table>
+    );
+}
+
+function ActualTable({
+    rows,
+    months,
+    comparison,
+}: {
+    rows: BoardRow[];
+    months: Month[];
+    comparison: boolean;
+}) {
+    const actualTotal = (subset: BoardRow[], month: string): number | null => {
+        const values = subset
+            .map((row) => row.months[month]?.actual ?? null)
+            .filter((value): value is number => value !== null);
+
+        return values.length === 0
+            ? null
+            : values.reduce((sum, value) => sum + value, 0);
+    };
+    const plannedTotal = (subset: BoardRow[], month: string) =>
+        subset.reduce((sum, row) => sum + (row.months[month]?.planned ?? 0), 0);
+    const totalMonth = (subset: BoardRow[], month: string): BoardMonth => {
+        const planned = plannedTotal(subset, month);
+        const actual = actualTotal(subset, month);
+
+        return {
+            planned,
+            actual,
+            status: classifyVariance(planned, actual),
+        };
+    };
+
+    return (
+        <Table>
+            <TableHeader>
+                <TableRow>
+                    <TableHead
+                        rowSpan={comparison ? 2 : 1}
+                        className="sticky top-0 left-0 min-w-48 bg-card"
+                    >
+                        Persoană
+                    </TableHead>
+                    <TableHead
+                        rowSpan={comparison ? 2 : 1}
+                        className="sticky top-0 min-w-64 bg-card"
+                    >
+                        Proiect / activitate
+                    </TableHead>
+                    {months.map((month) => (
+                        <TableHead
+                            key={month.key}
+                            colSpan={comparison ? 2 : 1}
+                            className="sticky top-0 min-w-32 bg-card text-center"
+                        >
+                            {month.label}
+                        </TableHead>
+                    ))}
+                </TableRow>
+                {comparison && (
+                    <TableRow>
+                        {months.flatMap((month) => [
+                            <TableHead
+                                key={`${month.key}-planned`}
+                                className="sticky top-10 min-w-24 bg-card text-right"
+                            >
+                                Plan
+                            </TableHead>,
+                            <TableHead
+                                key={`${month.key}-actual`}
+                                className="sticky top-10 min-w-28 bg-card text-right"
+                            >
+                                Realizat
+                            </TableHead>,
+                        ])}
+                    </TableRow>
+                )}
+            </TableHeader>
+            <TableBody>
+                {rows.map((row, index) => {
+                    const firstForPerson =
+                        index === 0 ||
+                        rows[index - 1].person.id !== row.person.id;
+                    const lastForPerson =
+                        index === rows.length - 1 ||
+                        rows[index + 1].person.id !== row.person.id;
+                    const personRows = rows.filter(
+                        (candidate) => candidate.person.id === row.person.id,
+                    );
+
+                    return (
+                        <Fragment key={row.key}>
+                            <TableRow>
+                                <TableCell className="sticky left-0 bg-card font-medium">
+                                    {firstForPerson && (
+                                        <PersonLabel person={row.person} />
+                                    )}
+                                </TableCell>
+                                <TableCell>
+                                    <ProjectLabel project={row.project} />
+                                </TableCell>
+                                {months.flatMap((month) => {
+                                    const value = row.months[month.key];
+
+                                    return comparison
+                                        ? [
+                                              <TableCell
+                                                  key={`${month.key}-planned`}
+                                                  className="text-right tabular-nums"
+                                              >
+                                                  {formatHours(value.planned)}
+                                              </TableCell>,
+                                              <TableCell
+                                                  key={`${month.key}-actual`}
+                                                  className="text-right tabular-nums"
+                                              >
+                                                  <VarianceValue
+                                                      month={value}
+                                                  />
+                                              </TableCell>,
+                                          ]
+                                        : [
+                                              <TableCell
+                                                  key={`${month.key}-actual`}
+                                                  className="text-right tabular-nums"
+                                              >
+                                                  {formatHours(value.actual)}
+                                              </TableCell>,
+                                          ];
+                                })}
+                            </TableRow>
+                            {lastForPerson && (
+                                <TableRow className="bg-muted/40 font-medium">
+                                    <TableCell className="sticky left-0 bg-muted">
+                                        Total {row.person.name}
+                                    </TableCell>
+                                    <TableCell />
+                                    {months.flatMap((month) =>
+                                        comparison
+                                            ? [
+                                                  <TableCell
+                                                      key={`${month.key}-planned`}
+                                                      className="text-right tabular-nums"
+                                                  >
+                                                      {formatHours(
+                                                          plannedTotal(
+                                                              personRows,
+                                                              month.key,
+                                                          ),
+                                                      )}
+                                                  </TableCell>,
+                                                  <TableCell
+                                                      key={`${month.key}-actual`}
+                                                      className="text-right tabular-nums"
+                                                  >
+                                                      <VarianceValue
+                                                          month={totalMonth(
+                                                              personRows,
+                                                              month.key,
+                                                          )}
+                                                      />
+                                                  </TableCell>,
+                                              ]
+                                            : [
+                                                  <TableCell
+                                                      key={`${month.key}-actual`}
+                                                      className="text-right tabular-nums"
+                                                  >
+                                                      {formatHours(
+                                                          actualTotal(
+                                                              personRows,
+                                                              month.key,
+                                                          ),
+                                                      )}
+                                                  </TableCell>,
+                                              ],
+                                    )}
+                                </TableRow>
+                            )}
+                        </Fragment>
+                    );
+                })}
+            </TableBody>
+            <TableFooter>
+                <TableRow>
+                    <TableCell>Total general</TableCell>
+                    <TableCell />
+                    {months.flatMap((month) =>
+                        comparison
+                            ? [
+                                  <TableCell
+                                      key={`${month.key}-planned`}
+                                      className="text-right tabular-nums"
+                                  >
+                                      {formatHours(
+                                          plannedTotal(rows, month.key),
+                                      )}
+                                  </TableCell>,
+                                  <TableCell
+                                      key={`${month.key}-actual`}
+                                      className="text-right tabular-nums"
+                                  >
+                                      <VarianceValue
+                                          month={totalMonth(rows, month.key)}
+                                      />
+                                  </TableCell>,
+                              ]
+                            : [
+                                  <TableCell
+                                      key={`${month.key}-actual`}
+                                      className="text-right tabular-nums"
+                                  >
+                                      {formatHours(
+                                          actualTotal(rows, month.key),
+                                      )}
+                                  </TableCell>,
+                              ],
+                    )}
+                </TableRow>
+            </TableFooter>
+        </Table>
+    );
+}
+
+function AdjustmentDialog({
+    open,
+    onOpenChange,
+    people,
+    projects,
+    months,
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    people: Props['people'];
+    projects: Props['projects'];
+    months: Month[];
+}) {
+    const activeProjects = projects.filter(
+        (project) => project.active !== false,
+    );
+    const form = useForm<AdjustmentPayload>({
+        person_id: people[0]?.id ?? '',
+        project_id: activeProjects[0]?.id ?? null,
+        internal_label: '',
+        month: months[0]?.key ?? '',
+        hours_delta: '',
+        reason: '',
+    });
+
+    const submit = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        form.post(storeAdjustment.url(), {
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.success('Ajustarea a fost înregistrată.');
+                onOpenChange(false);
+                form.reset();
+            },
+            onError: () =>
+                toast.error('Verifică datele ajustării și încearcă din nou.'),
+        });
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Adaugă ajustare realizat</DialogTitle>
+                    <DialogDescription>
+                        Ajustarea este auditată și nu modifică pontajele sursă
+                        din ClickUp.
+                    </DialogDescription>
+                </DialogHeader>
+                <form className="flex flex-col gap-5" onSubmit={submit}>
+                    <div className="flex flex-col gap-2">
+                        <Label htmlFor="adjustment-person">Persoană</Label>
+                        <Select
+                            value={String(form.data.person_id)}
+                            onValueChange={(value) =>
+                                form.setData('person_id', Number(value))
+                            }
+                        >
+                            <SelectTrigger id="adjustment-person">
+                                <SelectValue placeholder="Alege persoana" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    {people.map((person) => (
+                                        <SelectItem
+                                            key={person.id}
+                                            value={String(person.id)}
+                                        >
+                                            {person.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                        {form.errors.person_id && (
+                            <p className="text-sm text-destructive">
+                                {form.errors.person_id}
+                            </p>
+                        )}
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <Label htmlFor="adjustment-project">
+                            Proiect / activitate
+                        </Label>
+                        <Select
+                            value={
+                                form.data.project_id === null
+                                    ? 'internal'
+                                    : String(form.data.project_id)
+                            }
+                            onValueChange={(value) =>
+                                form.setData(
+                                    'project_id',
+                                    value === 'internal' ? null : Number(value),
+                                )
+                            }
+                        >
+                            <SelectTrigger id="adjustment-project">
+                                <SelectValue placeholder="Alege proiectul" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectGroup>
+                                    <SelectItem value="internal">
+                                        Activitate internă
+                                    </SelectItem>
+                                    {activeProjects.map((project) => (
+                                        <SelectItem
+                                            key={project.id}
+                                            value={String(project.id)}
+                                        >
+                                            {project.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    {form.data.project_id === null && (
+                        <div className="flex flex-col gap-2">
+                            <Label htmlFor="adjustment-label">
+                                Etichetă activitate internă
+                            </Label>
+                            <Input
+                                id="adjustment-label"
+                                aria-invalid={Boolean(
+                                    form.errors.internal_label,
+                                )}
+                                onChange={(event) =>
+                                    form.setData(
+                                        'internal_label',
+                                        event.target.value,
+                                    )
+                                }
+                                value={form.data.internal_label}
+                            />
+                            {form.errors.internal_label && (
+                                <p className="text-sm text-destructive">
+                                    {form.errors.internal_label}
+                                </p>
+                            )}
+                        </div>
+                    )}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="flex flex-col gap-2">
+                            <Label htmlFor="adjustment-month">Lună</Label>
+                            <Select
+                                value={form.data.month}
+                                onValueChange={(value) =>
+                                    form.setData('month', value)
+                                }
+                            >
+                                <SelectTrigger id="adjustment-month">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectGroup>
+                                        {months.map((month) => (
+                                            <SelectItem
+                                                key={month.key}
+                                                value={month.key}
+                                            >
+                                                {month.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectGroup>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <Label htmlFor="adjustment-hours">
+                                Diferență ore
+                            </Label>
+                            <Input
+                                id="adjustment-hours"
+                                aria-invalid={Boolean(form.errors.hours_delta)}
+                                inputMode="decimal"
+                                onChange={(event) =>
+                                    form.setData(
+                                        'hours_delta',
+                                        event.target.value === ''
+                                            ? ''
+                                            : Number(event.target.value),
+                                    )
+                                }
+                                placeholder="ex. 2,5 sau -1"
+                                step={0.25}
+                                type="number"
+                                value={form.data.hours_delta}
+                            />
+                            {form.errors.hours_delta && (
+                                <p className="text-sm text-destructive">
+                                    {form.errors.hours_delta}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <Label htmlFor="adjustment-reason">Motiv</Label>
+                        <Textarea
+                            id="adjustment-reason"
+                            aria-invalid={Boolean(form.errors.reason)}
+                            onChange={(event) =>
+                                form.setData('reason', event.target.value)
+                            }
+                            placeholder="Descrie motivul corecției"
+                            value={form.data.reason}
+                        />
+                        {form.errors.reason && (
+                            <p className="text-sm text-destructive">
+                                {form.errors.reason}
+                            </p>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onOpenChange(false)}
+                        >
+                            Renunță
+                        </Button>
+                        <Button type="submit" disabled={form.processing}>
+                            {form.processing && (
+                                <LoaderCircle
+                                    data-icon="inline-start"
+                                    className="animate-spin"
+                                />
+                            )}
+                            Înregistrează ajustarea
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function ReverseAdjustmentButton({
+    adjustment,
+}: {
+    adjustment: AdjustmentRecord;
+}) {
+    const [open, setOpen] = useState(false);
+    const form = useForm<ReversalPayload>({ reason: '' });
+    const submit = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        form.post(reverseAdjustment.url(adjustment.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                toast.success('Ajustarea a fost inversată.');
+                setOpen(false);
+                form.reset();
+            },
+            onError: () => toast.error('Ajustarea nu a putut fi inversată.'),
+        });
+    };
+
+    return (
+        <Dialog open={open} onOpenChange={setOpen}>
+            <Button
+                size="sm"
+                variant="outline"
+                disabled={adjustment.isReversal || adjustment.isReversed}
+                onClick={() => setOpen(true)}
+            >
+                <Undo2 data-icon="inline-start" />
+                {adjustment.isReversed ? 'Inversată' : 'Inversează'}
+            </Button>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Inversează ajustarea</DialogTitle>
+                    <DialogDescription>
+                        Se va crea o înregistrare opusă de{' '}
+                        {formatHours(-adjustment.hoursDelta)} ore. Istoricul
+                        original rămâne neschimbat.
+                    </DialogDescription>
+                </DialogHeader>
+                <form className="flex flex-col gap-5" onSubmit={submit}>
+                    <div className="flex flex-col gap-2">
+                        <Label htmlFor={`reversal-reason-${adjustment.id}`}>
+                            Motivul inversării
+                        </Label>
+                        <Textarea
+                            id={`reversal-reason-${adjustment.id}`}
+                            aria-invalid={Boolean(form.errors.reason)}
+                            onChange={(event) =>
+                                form.setData('reason', event.target.value)
+                            }
+                            value={form.data.reason}
+                        />
+                        {form.errors.reason && (
+                            <p className="text-sm text-destructive">
+                                {form.errors.reason}
+                            </p>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setOpen(false)}
+                        >
+                            Renunță
+                        </Button>
+                        <Button type="submit" disabled={form.processing}>
+                            {form.processing && (
+                                <LoaderCircle
+                                    data-icon="inline-start"
+                                    className="animate-spin"
+                                />
+                            )}
+                            Confirmă inversarea
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function AdjustmentHistory({
+    adjustments,
+    months,
+    canReverse,
+}: {
+    adjustments: AdjustmentRecord[];
+    months: Month[];
+    canReverse: boolean;
+}) {
+    const monthLabels = new Map(
+        months.map((month) => [month.key, month.label]),
+    );
+
+    return (
+        <Card className="min-w-0">
+            <CardHeader>
+                <CardTitle>Istoric ajustări</CardTitle>
+                <CardDescription>
+                    {adjustments.length} înregistrări append-only în perioada
+                    activă
+                </CardDescription>
+            </CardHeader>
+            <CardContent className="px-0">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Lună</TableHead>
+                            <TableHead>Persoană</TableHead>
+                            <TableHead>Proiect / activitate</TableHead>
+                            <TableHead className="text-right">Ore</TableHead>
+                            <TableHead>Motiv</TableHead>
+                            <TableHead>Autor</TableHead>
+                            <TableHead>Status</TableHead>
+                            {canReverse && <TableHead>Acțiune</TableHead>}
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {adjustments.map((adjustment) => (
+                            <TableRow key={adjustment.id}>
+                                <TableCell>
+                                    {monthLabels.get(adjustment.month) ??
+                                        adjustment.month}
+                                </TableCell>
+                                <TableCell>{adjustment.person}</TableCell>
+                                <TableCell>{adjustment.project}</TableCell>
+                                <TableCell className="text-right tabular-nums">
+                                    {formatHours(adjustment.hoursDelta)}
+                                </TableCell>
+                                <TableCell>{adjustment.reason}</TableCell>
+                                <TableCell>{adjustment.author}</TableCell>
+                                <TableCell>
+                                    <Badge
+                                        variant={
+                                            adjustment.isReversal
+                                                ? 'secondary'
+                                                : adjustment.isReversed
+                                                  ? 'outline'
+                                                  : 'default'
+                                        }
+                                    >
+                                        {adjustment.isReversal
+                                            ? 'inversare'
+                                            : adjustment.isReversed
+                                              ? 'inversată'
+                                              : 'activă'}
+                                    </Badge>
+                                </TableCell>
+                                {canReverse && (
+                                    <TableCell>
+                                        <ReverseAdjustmentButton
+                                            adjustment={adjustment}
+                                        />
+                                    </TableCell>
+                                )}
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </CardContent>
+        </Card>
+    );
+}
+
 export default function TeamLeadPlan({
     months,
     people,
     projects,
     roles,
     planRows,
+    comparisonRows,
+    adjustments,
     permissions,
 }: Props) {
+    const [mode, setMode] = useState<DisplayMode>('plan');
     const [personFilter, setPersonFilter] = useState('all');
     const [projectFilter, setProjectFilter] = useState('all');
     const [roleFilter, setRoleFilter] = useState('all');
-    const filteredRows = useMemo(
+    const [adjustmentOpen, setAdjustmentOpen] = useState(false);
+    const filterByPersonAndProject = useCallback(
+        <T extends PlanRow | BoardRow>(row: T) =>
+            (personFilter === 'all' ||
+                String(row.person.id) === personFilter) &&
+            (projectFilter === 'all' ||
+                (projectFilter === 'internal'
+                    ? row.project.internal
+                    : String(row.project.id) === projectFilter)),
+        [personFilter, projectFilter],
+    );
+    const filteredPlanRows = useMemo(
         () =>
             planRows
-                .filter(
-                    (row) =>
-                        personFilter === 'all' ||
-                        String(row.person.id) === personFilter,
-                )
-                .filter(
-                    (row) =>
-                        projectFilter === 'all' ||
-                        String(row.project.id) === projectFilter,
-                )
+                .filter(filterByPersonAndProject)
                 .filter(
                     (row) => roleFilter === 'all' || row.role === roleFilter,
                 )
@@ -219,10 +1102,34 @@ export default function TeamLeadPlan({
                         ) ||
                         left.role.localeCompare(right.role, 'ro'),
                 ),
-        [personFilter, planRows, projectFilter, roleFilter],
+        [filterByPersonAndProject, planRows, roleFilter],
     );
-    const totals = (rows: PlanRow[], month: string) =>
-        rows.reduce((total, row) => total + (row.hours[month] ?? 0), 0);
+    const filteredComparisonRows = useMemo(
+        () =>
+            comparisonRows
+                .filter(filterByPersonAndProject)
+                .filter(
+                    (row) =>
+                        roleFilter === 'all' || row.roles.includes(roleFilter),
+                )
+                .sort(
+                    (left, right) =>
+                        left.person.name.localeCompare(
+                            right.person.name,
+                            'ro',
+                        ) ||
+                        left.project.label.localeCompare(
+                            right.project.label,
+                            'ro',
+                        ),
+                ),
+        [comparisonRows, filterByPersonAndProject, roleFilter],
+    );
+    const visibleRows =
+        mode === 'plan'
+            ? filteredPlanRows.length
+            : filteredComparisonRows.length;
+    const totalRows = mode === 'plan' ? planRows.length : comparisonRows.length;
     const resetFilters = () => {
         setPersonFilter('all');
         setProjectFilter('all');
@@ -242,39 +1149,64 @@ export default function TeamLeadPlan({
                             </h1>
                         </div>
                         <p className="max-w-3xl text-sm text-muted-foreground">
-                            Planul este stocat în ore. Procentul din normă apare
-                            la trecerea peste fiecare celulă. Salvarea se face
-                            la ieșirea din câmp sau la Enter.
+                            Planul este editabil în ore, realizatul vine din
+                            ClickUp, iar corecțiile sunt ajustări separate și
+                            auditate.
                         </p>
                     </div>
-                    <ToggleGroup
-                        type="single"
-                        value="plan"
-                        variant="outline"
-                        aria-label="Mod afișare"
-                    >
-                        <ToggleGroupItem value="plan">
-                            Plan (ore)
-                        </ToggleGroupItem>
-                        <ToggleGroupItem value="actual" disabled>
-                            Realizat (ore)
-                        </ToggleGroupItem>
-                        <ToggleGroupItem value="comparison" disabled>
-                            Plan vs Realizat
-                        </ToggleGroupItem>
-                    </ToggleGroup>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {permissions.adjustActualHours && (
+                            <Button
+                                variant="outline"
+                                onClick={() => setAdjustmentOpen(true)}
+                            >
+                                <Plus data-icon="inline-start" />
+                                Adaugă ajustare
+                            </Button>
+                        )}
+                        <ToggleGroup
+                            type="single"
+                            value={mode}
+                            variant="outline"
+                            aria-label="Mod afișare"
+                            onValueChange={(value) => {
+                                if (value) {
+                                    setMode(value as DisplayMode);
+                                }
+                            }}
+                        >
+                            <ToggleGroupItem value="plan">
+                                Plan (ore)
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="actual">
+                                Realizat (ore)
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="comparison">
+                                Plan vs Realizat
+                            </ToggleGroupItem>
+                        </ToggleGroup>
+                    </div>
                 </div>
 
                 <Card className="min-w-0">
                     <CardHeader>
                         <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
                             <div className="flex flex-col gap-1">
-                                <CardTitle>Plan lunar în ore</CardTitle>
+                                <CardTitle>
+                                    {mode === 'plan'
+                                        ? 'Plan lunar în ore'
+                                        : mode === 'actual'
+                                          ? 'Realizat lunar în ore'
+                                          : 'Plan vs Realizat'}
+                                </CardTitle>
                                 <CardDescription>
-                                    {filteredRows.length} din {planRows.length}{' '}
-                                    rânduri
-                                    {!permissions.manageAllocations &&
+                                    {visibleRows} din {totalRows} rânduri
+                                    {mode === 'plan' &&
+                                        !permissions.manageAllocations &&
                                         ' · acces doar pentru citire'}
+                                    {mode !== 'plan' &&
+                                        !permissions.adjustActualHours &&
+                                        ' · realizat doar pentru citire'}
                                 </CardDescription>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
@@ -319,12 +1251,17 @@ export default function TeamLeadPlan({
                                             <SelectItem value="all">
                                                 Toate proiectele
                                             </SelectItem>
+                                            <SelectItem value="internal">
+                                                Activități interne
+                                            </SelectItem>
                                             {projects.map((project) => (
                                                 <SelectItem
                                                     key={project.id}
                                                     value={String(project.id)}
                                                 >
                                                     {project.label}
+                                                    {project.active === false &&
+                                                        ' (inactiv)'}
                                                 </SelectItem>
                                             ))}
                                         </SelectGroup>
@@ -368,127 +1305,46 @@ export default function TeamLeadPlan({
                         </div>
                     </CardHeader>
                     <CardContent className="px-0">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="sticky left-0 min-w-48 bg-card">
-                                        Persoană
-                                    </TableHead>
-                                    <TableHead className="min-w-64">
-                                        Proiect
-                                    </TableHead>
-                                    <TableHead className="min-w-28">
-                                        Rol
-                                    </TableHead>
-                                    {months.map((month) => (
-                                        <TableHead
-                                            key={month.key}
-                                            className="min-w-32 text-right"
-                                        >
-                                            {month.label}
-                                        </TableHead>
-                                    ))}
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredRows.map((row, index) => {
-                                    const firstForPerson =
-                                        index === 0 ||
-                                        filteredRows[index - 1].person.id !==
-                                            row.person.id;
-                                    const lastForPerson =
-                                        index === filteredRows.length - 1 ||
-                                        filteredRows[index + 1].person.id !==
-                                            row.person.id;
-                                    const personRows = filteredRows.filter(
-                                        (candidate) =>
-                                            candidate.person.id ===
-                                            row.person.id,
-                                    );
-
-                                    return (
-                                        <Fragment key={row.key}>
-                                            <TableRow>
-                                                <TableCell className="sticky left-0 bg-card font-medium">
-                                                    {firstForPerson && (
-                                                        <span className="flex items-center gap-2">
-                                                            {row.person.name}
-                                                            {row.person
-                                                                .isExternal && (
-                                                                <Badge variant="secondary">
-                                                                    extern
-                                                                </Badge>
-                                                            )}
-                                                        </span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {row.project.label}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {row.role || '—'}
-                                                </TableCell>
-                                                {months.map((month) => (
-                                                    <TableCell
-                                                        key={month.key}
-                                                        className="text-right"
-                                                    >
-                                                        <PlanHoursInput
-                                                            row={row}
-                                                            month={month.key}
-                                                            canEdit={
-                                                                permissions.manageAllocations
-                                                            }
-                                                        />
-                                                    </TableCell>
-                                                ))}
-                                            </TableRow>
-                                            {lastForPerson && (
-                                                <TableRow className="bg-muted/40 font-medium">
-                                                    <TableCell className="sticky left-0 bg-muted">
-                                                        Total {row.person.name}
-                                                    </TableCell>
-                                                    <TableCell colSpan={2} />
-                                                    {months.map((month) => (
-                                                        <TableCell
-                                                            key={month.key}
-                                                            className="text-right tabular-nums"
-                                                        >
-                                                            {totals(
-                                                                personRows,
-                                                                month.key,
-                                                            ).toLocaleString(
-                                                                'ro-RO',
-                                                            ) || '·'}
-                                                        </TableCell>
-                                                    ))}
-                                                </TableRow>
-                                            )}
-                                        </Fragment>
-                                    );
-                                })}
-                            </TableBody>
-                            <TableFooter>
-                                <TableRow>
-                                    <TableCell>Total general</TableCell>
-                                    <TableCell colSpan={2} />
-                                    {months.map((month) => (
-                                        <TableCell
-                                            key={month.key}
-                                            className="text-right tabular-nums"
-                                        >
-                                            {totals(
-                                                filteredRows,
-                                                month.key,
-                                            ).toLocaleString('ro-RO') || '·'}
-                                        </TableCell>
-                                    ))}
-                                </TableRow>
-                            </TableFooter>
-                        </Table>
+                        {mode === 'plan' && (
+                            <PlanTable
+                                rows={filteredPlanRows}
+                                months={months}
+                                canEdit={permissions.manageAllocations}
+                            />
+                        )}
+                        {mode === 'actual' && (
+                            <ActualTable
+                                rows={filteredComparisonRows}
+                                months={months}
+                                comparison={false}
+                            />
+                        )}
+                        {mode === 'comparison' && (
+                            <ActualTable
+                                rows={filteredComparisonRows}
+                                months={months}
+                                comparison
+                            />
+                        )}
                     </CardContent>
                 </Card>
+                {adjustments.length > 0 && (
+                    <AdjustmentHistory
+                        adjustments={adjustments}
+                        months={months}
+                        canReverse={permissions.adjustActualHours}
+                    />
+                )}
             </div>
+            {permissions.adjustActualHours && (
+                <AdjustmentDialog
+                    open={adjustmentOpen}
+                    onOpenChange={setAdjustmentOpen}
+                    people={people}
+                    projects={projects}
+                    months={months}
+                />
+            )}
         </>
     );
 }

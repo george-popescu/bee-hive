@@ -56,6 +56,7 @@ final class PeopleSynchronizer
             $person->fill([
                 'clickup_user_id' => $clickUpUserId,
                 'email' => $email ?? $person->email,
+                'is_external' => false,
                 'active' => true,
             ])->save();
 
@@ -68,9 +69,13 @@ final class PeopleSynchronizer
 
         Person::query()
             ->whereNotNull('clickup_user_id')
+            ->where('is_external', false)
             ->when($seenIds !== [], fn ($query) => $query->whereNotIn('clickup_user_id', $seenIds))
             ->when($seenIds === [], fn ($query) => $query)
-            ->update(['active' => false]);
+            ->update([
+                'active' => false,
+                'is_external' => true,
+            ]);
 
         return count($seenIds);
     }

@@ -22,14 +22,16 @@ function clickUpClientFake(
     bool $includeRecords = true,
     string $projectFolderName = '[Acme][Portal]',
     bool $validFolderLists = true,
+    bool $externalTimeEntry = false,
 ): ClickUpClient {
-    return new class($failOnTimeEntries, $includeRecords, $projectFolderName, $validFolderLists) implements ClickUpClient
+    return new class($failOnTimeEntries, $includeRecords, $projectFolderName, $validFolderLists, $externalTimeEntry) implements ClickUpClient
     {
         public function __construct(
             private readonly bool $failOnTimeEntries,
             private readonly bool $includeRecords,
             private readonly string $projectFolderName,
             private readonly bool $validFolderLists,
+            private readonly bool $externalTimeEntry,
         ) {}
 
         public function members(): array
@@ -92,10 +94,16 @@ function clickUpClientFake(
                 return [];
             }
 
+            if ($this->externalTimeEntry && $assigneeIds !== []) {
+                return [];
+            }
+
             return [[
                 'id' => 'entry-1',
                 'task' => ['id' => 'task-1', 'name' => 'Build dashboard'],
-                'user' => ['id' => 101, 'username' => 'Stefan Ionescu'],
+                'user' => $this->externalTimeEntry
+                    ? ['id' => 999, 'username' => 'Contractor Extern']
+                    : ['id' => 101, 'username' => 'Stefan Ionescu'],
                 'task_location' => [
                     'list_id' => 'list-project',
                     'folder_name' => '[Acme][Portal]',
@@ -351,4 +359,54 @@ it('records a failed run after preserving stages completed before the failure', 
         ->and(ClickUpTask::query()->count())->toBe(1)
         ->and(TimeEntry::query()->count())->toBe(0)
         ->and(TimeOff::query()->count())->toBe(1);
+});
+
+it('imports time entries for unknown ClickUp users as active external people', function () {
+    Project::factory()->create([
+        'clickup_folder_id' => null,
+        'client' => 'Acme',
+        'name' => 'Portal',
+    ]);
+    app()->instance(ClickUpClient::class, clickUpClientFake(externalTimeEntry: true));
+
+    $options = new ClickUpSyncOptions(
+        from: CarbonImmutable::parse('2026-07-01')->startOfDay(),
+        to: CarbonImmutable::parse('2026-07-31')->endOfDay(),
+    );
+    app(ClickUpSyncService::class)->sync($options);
+    app(ClickUpSyncService::class)->sync($options);
+
+    $external = Person::query()->where('clickup_user_id', '999')->sole();
+    $entry = TimeEntry::query()->sole();
+
+    expect($external->name)->toBe('Contractor Extern')
+        ->and($external->is_external)->toBeTrue()
+        ->and($external->active)->toBeTrue()
+        ->and($external->default_monthly_capacity_hours)->toBe('0.00')
+        ->and($entry->person_id)->toBe($external->id)
+        ->and(Person::query()->where('clickup_user_id', '999')->count())->toBe(1);
+});
+
+it('reclassifies former workspace members with current time entries as active externals', function () {
+    $formerMember = Person::factory()->create([
+        'clickup_user_id' => '999',
+        'name' => 'Contractor Extern',
+        'is_external' => false,
+        'active' => true,
+    ]);
+    Project::factory()->create([
+        'clickup_folder_id' => null,
+        'client' => 'Acme',
+        'name' => 'Portal',
+    ]);
+    app()->instance(ClickUpClient::class, clickUpClientFake(externalTimeEntry: true));
+
+    app(ClickUpSyncService::class)->sync(new ClickUpSyncOptions(
+        from: CarbonImmutable::parse('2026-07-01')->startOfDay(),
+        to: CarbonImmutable::parse('2026-07-31')->endOfDay(),
+    ));
+
+    expect($formerMember->refresh()->is_external)->toBeTrue()
+        ->and($formerMember->active)->toBeTrue()
+        ->and(TimeEntry::query()->sole()->person_id)->toBe($formerMember->id);
 });

@@ -144,12 +144,15 @@ Ecranul reproduce prezentarea și valorile capturii „Plan vs Realizat” pe ac
 
 ### Status implementare — 11 iulie 2026
 
-- În progres: primul vertical slice „Plan (ore)” este funcțional end-to-end.
+- Finalizat: cele trei moduri „Plan”, „Realizat” și „Plan vs Realizat” sunt funcționale end-to-end.
 - Implementat: scope global pentru Admin/Management și scope pe membrii echipelor conduse pentru Team Lead, aplicat identic la citire și scriere.
 - Implementat: perioada mai–decembrie 2026 derivată din setări sau, ca fallback, din alocările importate; matrice persoană × proiect × rol, filtre, subtotaluri și total general.
 - Implementat: editare în pași de `0,25h`, autosave la blur/Enter, audit `created_by`/`updated_by`, feedback vizibil și rollback la eroare.
+- Implementat: agregare bulk pentru pontaje și ajustări la nivel persoană × proiect/activitate internă × lună, inclusiv persoanele externe și statusurile de abatere agreate.
+- Implementat: ajustări append-only cu motiv, autor, validare de perioadă, permisiune și scope; dialogul permite și adăugarea unei perechi fără pontaje existente.
 - Implementat: pagină Inertia, componente shadcn, navigație condiționată de permisiune și rute TypeScript generate cu Wayfinder.
-- Următorul slice: „Realizat” și „Plan vs Realizat”, inclusiv ajustările auditate. Acesta poate fi construit și testat cu fixture-uri înainte de obținerea tokenului ClickUp cu acces la pontaje.
+- Verificat: testele feature acoperă agregarea, intern/extern, permisiunile și validările; build-ul, TypeScript, ESLint, PHPStan și QA-ul în browser pentru toate modurile și dialog trec fără erori în consolă.
+- Limitare operațională izolată: valorile live din „Realizat” vor apărea după înlocuirea tokenului ClickUp cu unul care poate citi pontajele tuturor membrilor; fixture-urile și ajustările funcționează independent.
 
 ---
 

@@ -120,6 +120,24 @@ it('sends the expected query when requesting time entries', function () {
         ]);
 });
 
+it('requests all workspace time entries when no assignee filter is supplied', function () {
+    Http::fake([
+        'clickup.test/*' => Http::response(['data' => []]),
+    ]);
+    $from = CarbonImmutable::parse('2026-06-01T00:00:00Z');
+    $to = CarbonImmutable::parse('2026-06-30T23:59:59Z');
+
+    makeHttpClickUpClient()->timeEntries($from, $to, []);
+
+    Http::assertSent(fn (Request $request) => $request->method() === 'GET'
+        && ! array_key_exists('assignee', $request->data())
+        && $request->data() === [
+            'start_date' => (string) $from->getTimestampMs(),
+            'end_date' => (string) $to->getTimestampMs(),
+            'include_location_names' => 'true',
+        ]);
+});
+
 it('rejects malformed successful snapshots instead of treating them as empty', function () {
     Http::fake([
         'clickup.test/*' => Http::response([]),

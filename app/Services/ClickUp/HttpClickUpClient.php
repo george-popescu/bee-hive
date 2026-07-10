@@ -83,16 +83,18 @@ final class HttpClickUpClient implements ClickUpClient
 
     public function timeEntries(CarbonInterface $from, CarbonInterface $to, array $assigneeIds): array
     {
-        if ($assigneeIds === []) {
-            return [];
-        }
-
-        $response = $this->get("/team/{$this->workspaceId}/time_entries", [
+        $query = [
             'start_date' => (string) $from->getTimestampMs(),
             'end_date' => (string) $to->getTimestampMs(),
-            'assignee' => implode(',', $assigneeIds),
-            'include_location_names' => 'true',
-        ]);
+        ];
+
+        if ($assigneeIds !== []) {
+            $query['assignee'] = implode(',', $assigneeIds);
+        }
+
+        $query['include_location_names'] = 'true';
+
+        $response = $this->get("/team/{$this->workspaceId}/time_entries", $query);
 
         return $this->records($response, 'data', 'time-entry snapshot');
     }

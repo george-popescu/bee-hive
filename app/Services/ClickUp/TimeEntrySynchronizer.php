@@ -18,16 +18,6 @@ final class TimeEntrySynchronizer
     public function sync(CarbonInterface $from, CarbonInterface $to): int
     {
         $people = Person::query()->whereNotNull('clickup_user_id')->get()->keyBy('clickup_user_id');
-        $assigneeIds = [];
-
-        foreach ($people->keys() as $id) {
-            $assigneeIds[] = (string) $id;
-        }
-
-        if ($assigneeIds === []) {
-            return 0;
-        }
-
         $tasks = ClickUpTask::query()->with('clickUpList.folder')->get()->keyBy('clickup_task_id');
         $lists = ClickUpList::query()->with('folder')->get()->keyBy('clickup_list_id');
         $entries = [];
@@ -38,7 +28,7 @@ final class TimeEntrySynchronizer
             $windowEnd = $cursor->endOfMonth()->min($rangeEnd);
             $entries = [
                 ...$entries,
-                ...$this->client->timeEntries($cursor, $windowEnd, $assigneeIds),
+                ...$this->client->timeEntries($cursor, $windowEnd, []),
             ];
             $cursor = $windowEnd->addMillisecond();
         }
@@ -65,6 +55,26 @@ final class TimeEntrySynchronizer
                 ?? $task?->clickup_list_id;
             $list = $listId === null ? null : $lists->get($listId);
             $person = $clickUpUserId === null ? null : $people->get($clickUpUserId);
+
+            if ($person === null && $clickUpUserId !== null) {
+                $personName = is_string(data_get($payload, 'user.username'))
+                    ? trim(data_get($payload, 'user.username'))
+                    : '';
+                $person = Person::query()->firstOrCreate(
+                    ['clickup_user_id' => $clickUpUserId],
+                    [
+                        'name' => $personName === '' ? "Extern ClickUp {$clickUpUserId}" : $personName,
+                        'default_monthly_capacity_hours' => 0,
+                        'is_external' => true,
+                        'active' => true,
+                    ],
+                );
+                $people->put($clickUpUserId, $person);
+            }
+
+            if ($person?->is_external && ! $person->active) {
+                $person->update(['active' => true]);
+            }
             $projectId = $task === null
                 ? ($list === null ? null : ($list->project_id ?? $list->folder?->project_id))
                 : ($task->project_id ?? ($list === null ? null : ($list->project_id ?? $list->folder?->project_id)));
