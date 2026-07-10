@@ -97,6 +97,7 @@ class PmBoardData
                 'name',
                 'status',
                 'estimate_seconds',
+                'tracked_seconds',
                 'start_at',
                 'due_at',
                 'active',
@@ -124,7 +125,7 @@ class PmBoardData
         $taskRows = $tasks->map(fn (ClickUpTask $task): array => $this->taskData(
             task: $task,
             periodEntries: $periodEntries->get($task->getKey()) ?? new EloquentCollection,
-            totalSeconds: (int) ($totalSeconds->get($task->getKey()) ?? 0),
+            totalSeconds: $task->tracked_seconds ?? (int) ($totalSeconds->get($task->getKey()) ?? 0),
         ));
         $workedTasks = $taskRows
             ->filter(fn (array $task): bool => $task['periodHours'] > 0)
@@ -164,7 +165,6 @@ class PmBoardData
         ];
     }
 
-    /** @return array<string, mixed> */
     /**
      * @param  EloquentCollection<int, TimeEntry>  $periodEntries
      * @return array<string, mixed>
@@ -179,11 +179,15 @@ class PmBoardData
             ? null
             : round(($totalSeconds / $task->estimate_seconds) * 100, 1);
         $people = $periodEntries
-            ->groupBy(fn (TimeEntry $entry): string => $this->entryPersonName($entry))
-            ->map(fn (Collection $entries, string $name): array => [
-                'name' => $name,
-                'hours' => round(((int) $entries->sum('duration_seconds')) / 3600, 2),
-            ])
+            ->groupBy(fn (TimeEntry $entry): string => $this->entryPersonKey($entry))
+            ->map(function (Collection $entries): array {
+                $entry = $entries->first();
+
+                return [
+                    'name' => $entry instanceof TimeEntry ? $this->entryPersonName($entry) : 'Necunoscut',
+                    'hours' => round(((int) $entries->sum('duration_seconds')) / 3600, 2),
+                ];
+            })
             ->values()
             ->all();
         $status = trim((string) $task->status);
@@ -226,12 +230,16 @@ class PmBoardData
     private function peopleWorked(EloquentCollection $periodEntries): array
     {
         return array_values($periodEntries
-            ->groupBy(fn (TimeEntry $entry): string => $this->entryPersonName($entry))
-            ->map(fn (Collection $entries, string $name): array => [
-                'name' => $name,
-                'hours' => round(((int) $entries->sum('duration_seconds')) / 3600, 2),
-                'tasks' => $entries->pluck('click_up_task_id')->filter()->unique()->count(),
-            ])
+            ->groupBy(fn (TimeEntry $entry): string => $this->entryPersonKey($entry))
+            ->map(function (Collection $entries): array {
+                $entry = $entries->first();
+
+                return [
+                    'name' => $entry instanceof TimeEntry ? $this->entryPersonName($entry) : 'Necunoscut',
+                    'hours' => round(((int) $entries->sum('duration_seconds')) / 3600, 2),
+                    'tasks' => $entries->pluck('click_up_task_id')->filter()->unique()->count(),
+                ];
+            })
             ->sortByDesc('hours')
             ->values()
             ->all());
@@ -244,6 +252,19 @@ class PmBoardData
         }
 
         return $entry->person->name;
+    }
+
+    private function entryPersonKey(TimeEntry $entry): string
+    {
+        if ($entry->person_id !== null) {
+            return 'person:'.$entry->person_id;
+        }
+
+        if ($entry->clickup_user_id !== null) {
+            return 'clickup:'.$entry->clickup_user_id;
+        }
+
+        return 'entry:'.$entry->getKey();
     }
 
     /** @return array{id: int, label: string, template: string, templateLabel: string, managerIds: list<int>} */

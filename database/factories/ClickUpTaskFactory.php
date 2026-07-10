@@ -28,6 +28,7 @@ class ClickUpTaskFactory extends Factory
             'name' => fake()->sentence(5),
             'status' => fake()->randomElement(['to do', 'in progress', 'complete']),
             'estimate_seconds' => fake()->numberBetween(1, 80) * 1800,
+            'tracked_seconds' => null,
             'start_at' => $startAt,
             'due_at' => $startAt->addDays(fake()->numberBetween(1, 30)),
             'active' => true,

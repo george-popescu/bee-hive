@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property Carbon|null $start_at
  * @property Carbon|null $due_at
+ * @property int|null $tracked_seconds
  */
 #[Fillable([
     'project_id',
@@ -22,6 +23,7 @@ use Illuminate\Support\Carbon;
     'name',
     'status',
     'estimate_seconds',
+    'tracked_seconds',
     'start_at',
     'due_at',
     'active',
@@ -62,6 +64,7 @@ class ClickUpTask extends Model
     {
         return [
             'estimate_seconds' => 'integer',
+            'tracked_seconds' => 'integer',
             'start_at' => 'datetime',
             'due_at' => 'datetime',
             'active' => 'boolean',

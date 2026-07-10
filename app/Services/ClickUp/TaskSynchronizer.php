@@ -35,6 +35,9 @@ final class TaskSynchronizer
             $estimateMilliseconds = is_numeric($payload['time_estimate'] ?? null)
                 ? max(0, (int) $payload['time_estimate'])
                 : null;
+            $trackedMilliseconds = is_numeric($payload['time_spent'] ?? null)
+                ? max(0, (int) $payload['time_spent'])
+                : null;
             $projectId = $list === null
                 ? null
                 : ($list->project_id ?? $list->folder?->project_id);
@@ -45,6 +48,7 @@ final class TaskSynchronizer
                 'name' => $name,
                 'status' => ClickUpValue::status($payload['status'] ?? null),
                 'estimate_seconds' => $estimateMilliseconds === null ? null : intdiv($estimateMilliseconds, 1_000),
+                'tracked_seconds' => $trackedMilliseconds === null ? null : intdiv($trackedMilliseconds, 1_000),
                 'start_at' => ClickUpValue::dateTime($payload['start_date'] ?? null),
                 'due_at' => ClickUpValue::dateTime($payload['due_date'] ?? null),
                 'active' => true,
@@ -75,6 +79,7 @@ final class TaskSynchronizer
                         'name',
                         'status',
                         'estimate_seconds',
+                        'tracked_seconds',
                         'start_at',
                         'due_at',
                         'active',

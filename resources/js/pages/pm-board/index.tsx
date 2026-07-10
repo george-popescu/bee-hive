@@ -355,14 +355,20 @@ export default function PmBoard({
                                         )}
                                     </div>
                                     <p className="mt-1 text-sm text-muted-foreground">
-                                        Ultima sincronizare:{' '}
-                                        {sync?.finishedAt
+                                        {sync?.status === 'failed'
+                                            ? `Ultima sincronizare a eșuat${sync.error ? `: ${sync.error}` : '.'}`
+                                            : 'Ultima sincronizare: '}
+                                        {sync?.status !== 'failed' &&
+                                        sync?.finishedAt
                                             ? new Date(
                                                   sync.finishedAt,
                                               ).toLocaleString('ro-RO')
-                                            : sync?.startedAt
+                                            : sync?.status !== 'failed' &&
+                                                sync?.startedAt
                                               ? 'în curs'
-                                              : 'nu există încă'}
+                                              : sync?.status !== 'failed'
+                                                ? 'nu există încă'
+                                                : ''}
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">

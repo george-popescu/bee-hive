@@ -100,6 +100,7 @@ it('builds weekly worked and upcoming metrics from period and lifetime hours', f
         'name' => 'Implementare autentificare',
         'status' => 'in progress',
         'estimate_seconds' => 10 * 3600,
+        'tracked_seconds' => 12 * 3600,
         'start_at' => '2026-07-06 09:00:00',
         'due_at' => '2026-07-10 18:00:00',
     ]);
@@ -199,4 +200,33 @@ it('uses calendar month boundaries and month navigation', function () {
             ->where('period.previousAnchor', '2026-06-15')
             ->where('period.nextAnchor', '2026-08-15')
             ->where('workedTasks.0.periodHours', 2));
+});
+
+it('keeps contributors with the same display name separate by stable identity', function () {
+    $user = globalPmBoardViewer();
+    $project = Project::factory()->create();
+    $task = ClickUpTask::factory()->create(['project_id' => $project]);
+
+    foreach ([['external-1', 2], ['external-2', 3]] as [$clickUpUserId, $hours]) {
+        TimeEntry::factory()->create([
+            'click_up_task_id' => $task,
+            'person_id' => null,
+            'clickup_user_id' => $clickUpUserId,
+            'person_name' => 'Ana Pop',
+            'project_id' => $project,
+            'started_at' => '2026-07-08 10:00:00',
+            'duration_seconds' => $hours * 3600,
+        ]);
+    }
+
+    $this->actingAs($user)
+        ->get(route('pm_board.index', [
+            'project' => $project->id,
+            'period' => 'week',
+            'anchor' => '2026-07-08',
+        ]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('workedTasks.0.people', 2)
+            ->has('peopleWorked', 2)
+            ->where('kpis.activePeople', 2));
 });

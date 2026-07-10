@@ -78,6 +78,7 @@ function clickUpClientFake(
                 'list' => ['id' => 'list-project'],
                 'status' => ['status' => 'in progress'],
                 'time_estimate' => 7_200_000,
+                'time_spent' => 10_800_000,
                 'start_date' => '1784073600000',
                 'due_date' => '1784160000000',
                 'assignees' => [['id' => 101]],
@@ -325,6 +326,7 @@ it('synchronizes ClickUp data idempotently without changing the M1 allocation pl
         ->and($internalFolder->kind)->toBe(ClickUpLocationKind::Internal)
         ->and($task->project_id)->toBe($project->getKey())
         ->and($task->estimate_seconds)->toBe(7_200)
+        ->and($task->tracked_seconds)->toBe(10_800)
         ->and($task->assignees)->toHaveCount(1)
         ->and($entry->project_id)->toBe($project->getKey())
         ->and($entry->duration_seconds)->toBe(3_600)
