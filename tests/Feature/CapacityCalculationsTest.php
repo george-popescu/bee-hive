@@ -39,6 +39,14 @@ it('calculates available capacity using working leave days and a monthly overrid
         'end_date' => '2026-07-08',
     ]);
 
+    TimeOff::factory()->create([
+        'person_id' => $person,
+        'status' => 'approved',
+        'start_date' => '2026-07-09',
+        'end_date' => '2026-07-09',
+        'active' => false,
+    ]);
+
     $calculator = app(AvailableCapacityCalculator::class);
 
     expect($calculator->grossHours($person, $month))->toBe(160.0)

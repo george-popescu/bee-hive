@@ -112,6 +112,16 @@ Dacă tokenul sau mapările ClickUp nu sunt disponibile, milestone-urile de inte
 
 O sincronizare repetată este idempotentă, nu produce duplicate și nu șterge datele interne introduse manual.
 
+### Status implementare — 10 iulie 2026
+
+- Finalizat: client ClickUp strict read-only, izolat prin contract intern, cu autentificare raw, paginare, retry controlat și tratarea limitelor API.
+- Finalizat: sincronizare idempotentă pentru membri, foldere, liste, taskuri, asignări, pontaje și concedii, fără write-back în ClickUp.
+- Finalizat: mapare sigură între ierarhia de execuție ClickUp și proiectele comerciale M1. Folderele interne sunt marcate separat, potrivirile exacte și unice se pot lega automat, iar cazurile ambigue rămân `unmapped` până la o mapare explicită.
+- Finalizat: istoric pentru rulări, intervale, contoare și erori; comandă `clickup:sync`, job unic cu retry/timeout și programare orară cu protecție la overlap.
+- Validare automată completă: ESLint, Prettier, TypeScript, Pint, PHPStan și 81 de teste cu 336 de aserțiuni.
+- Validare live: 25 membri, 20 foldere și 67 liste citite; 59 taskuri modificate în ultima zi și 1.761 înregistrări de concediu sincronizate. Cele 285 de alocări M1 au rămas neschimbate.
+- Limitare operațională rămasă: tokenul curent nu poate citi pontajele celorlalți membri (`TIMEENTRY_059`). Fluxul este implementat și testat cu fixture-uri, dar validarea live a pontajelor necesită un token de Workspace Owner/Admin cu acces la time entries.
+
 ---
 
 ## Milestone 3 — View Team Lead

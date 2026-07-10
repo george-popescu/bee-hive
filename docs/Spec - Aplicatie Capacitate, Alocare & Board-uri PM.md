@@ -375,11 +375,11 @@ Aplicația folosește **PostgreSQL** în dezvoltarea locală, staging și produc
   - **board PM per proiect**: taskuri (status, asignați, ore logate, estimare, deadline, module) agregate pe săptămână/lună — View PM (§6).
 - `GET /projects/:id/board?period=week|month&anchor=YYYY-MM-DD` — datele board-ului PM pentru un proiect și o perioadă.
 - **Integrare ClickUp** (§9):
-  - `POST /sync/clickup` — declanșează sincronizarea (membri → persoane, foldere/liste → proiecte, time entries → actualHours + taskuri board PM, listă concedii → timeOff). Idempotent.
+  - `POST /sync/clickup` — declanșează sincronizarea (membri → persoane, foldere/liste → locații mapabile la proiecte, time entries → actualHours + taskuri board PM, listă concedii → timeOff). Idempotent.
   - job programat pentru sync automat (nightly / la câteva ore) + `GET /sync/status` cu timestamp „ultima sincronizare".
   - integrarea este read-only; write-back-ul în ClickUp nu intră în scope-ul curent.
   - stocare securizată a credențialelor ClickUp (token/OAuth), nu în cod.
-- `GET /time-off`, `PUT /time-off` — concedii (corectare manuală peste ce vine din sync).
+- `GET /time-off` — concedii sincronizate. O eventuală corecție manuală se salvează ca overlay separat și auditat; nu modifică rândul-sursă ClickUp.
 
 **Reguli de scriere importante:**
 - Orele din `actualHours` sunt scrise numai de sincronizarea ClickUp. Corecțiile utilizatorilor creează `ActualAdjustment` și nu suprascriu sursa.
@@ -401,7 +401,8 @@ Datele au **surse diferite** în funcție de tip. Acesta e un punct central al p
 
 ### 9.1 Persoane și proiecte — din ClickUp (sincronizare)
 - **Persoanele** se sincronizează din **membrii workspace-ului ClickUp** (nume, eventual rol dacă e mapabil). Norma (`fteHoursMonth`) și tariful nu există în ClickUp → se completează/editează în app (implicit `settings.defaultFteHoursMonth`).
-- **Proiectele** se sincronizează din **structura ClickUp** (folder/list). În prototip, gruparea proiectelor reale se face după **folderul ClickUp** — mai multe rânduri care împart același folder = un singur proiect real. Aplicația nouă trebuie să preia această logică: `Project.folder` = folderul ClickUp, iar `client`/`name` derivate din ierarhia ClickUp (Space/Folder/List).
+- **Proiectele comerciale** sunt entități interne ale aplicației și nu se presupune că au o relație 1:1 cu folderele ClickUp. Ierarhia de execuție ClickUp se sincronizează separat (`ClickUpFolder` și `ClickUpList`) și se leagă explicit la proiectul intern.
+- O legătură poate fi propusă automat numai când numele normalizat produce o potrivire exactă și unică. Folderele administrative/interne sunt marcate separat, iar cazurile ambigue rămân `unmapped` până la configurarea explicită; nu se fac join-uri speculative după fragmente de nume.
 - Sincronizarea trebuie să fie **idempotentă** (re-rularea nu duplică) și să nu șteargă alocările manuale când un proiect/persoană dispare din ClickUp (marchează ca inactiv, nu delete).
 
 ### 9.2 Realizatul (orele lucrate) — din ClickUp (API, automat)
@@ -420,6 +421,7 @@ Datele au **surse diferite** în funcție de tip. Acesta e un punct central al p
 - Statusurile listei sunt `requires approval`, `on leave`, `approved` și `complete`. Doar `approved`, `on leave` și `complete` reduc capacitatea; `requires approval` rămâne vizibil, dar nu reduce capacitatea până la aprobare.
 - Câmpul numeric `Vacation period` poate fi păstrat pentru control, însă numărul de zile lucrătoare se derivează canonic din `start_date`–`due_date`. Tipul implicit este `PTO` până când este identificat un tag sau câmp separat pentru odihnă / medical / neplătit.
 - Intervalele se sparg pe luni și se numără **zilele lucrătoare** din fiecare lună (§4.4).
+- Rândurile sincronizate rămân sursa brută și nu sunt editate manual. O corecție viitoare se modelează separat, ca overlay auditat, astfel încât următorul sync să nu o suprascrie și istoricul să rămână verificabil.
 - Se sincronizează în același job cu restul (§9.2) și respectă aceeași cadență + buton „Sincronizează acum".
 
 ### 9.3 Planul (alocările) — manual în app
