@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La Depozit — board PM săptămânal</title>
+<style>
+  :root{color-scheme:light;--ink:#1a1f2b;--mut:#6b7280;--line:#e6e8ee;--bg:#f6f7f9;--card:#fff;
+    --good:#16a34a;--goodbg:#e7f6ec;--bad:#dc2626;--badbg:#fdeaea;--warn:#d97706;--warnbg:#fef3e2;
+    --blue:#2563eb;--bluebg:#e8effe;--mutbg:#eef0f4;--teal:#0f6e56;--tealbg:#e1f5ee;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:14.5px;line-height:1.5;padding:18px}
+  .wrap{max-width:1280px;margin:0 auto}
+  h1{font-size:20px;margin:0}
+  .head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .sp{flex:1}.muted{color:var(--mut)}.pill{font-size:11.5px;color:var(--mut)}
+  .tm{font-size:12px;font-weight:700;padding:4px 11px;border-radius:999px;background:var(--bluebg);color:var(--blue)}
+  .wkbox{display:inline-flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:11px;padding:4px 10px}
+  .wklbl{font-weight:700;min-width:140px;text-align:center}
+  .statusbar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 6px}
+  .spill{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:12px;font-size:16px;font-weight:700}
+  .b-blue{background:var(--bluebg);color:var(--blue)}.b-mut{background:var(--mutbg);color:var(--mut)}.b-teal{background:var(--tealbg);color:var(--teal)}
+  .maintabs{display:flex;gap:4px;margin:16px 0 14px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:8px}
+  .maintabs button{border:0;background:transparent;color:var(--mut);font:inherit;font-weight:700;font-size:14.5px;padding:9px 15px;border-radius:9px;cursor:pointer}
+  .maintabs button:hover{background:#f0f2f6}.maintabs button.on{background:var(--ink);color:#fff}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:16px}
+  .sec{font-size:13px;font-weight:700;color:var(--ink);margin:0 0 4px;display:flex;align-items:center;gap:8px}
+  .secsub{font-size:11.5px;color:var(--mut);margin:0 0 12px}
+  .sec .ic{width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:13px}
+  .ic.done{background:var(--goodbg)}.ic.next{background:var(--bluebg)}.ic.who{background:var(--mutbg)}.ic.prog{background:var(--tealbg)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{padding:8px 9px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--mut);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+  th.l,td.l{text-align:left}
+  tr.tot td{font-weight:780;border-top:2px solid var(--line);background:#fafbfd}
+  .tname{overflow:hidden;text-overflow:ellipsis;max-width:560px;font-weight:600}
+  a.tl{color:var(--blue);text-decoration:none}a.tl:hover{text-decoration:underline}
+  a.tl::after{content:" \2197";font-size:10px;opacity:.6}
+  .who{font-size:11.5px;color:var(--mut)}
+  td.owncell{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sdot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;margin-right:7px;flex:none;box-shadow:0 0 0 1px rgba(0,0,0,.06)}
+  .pbar{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+  .pbarwrap{width:80px;background:#eef0f4;border-radius:6px;height:9px;overflow:hidden}
+  .pbarwrap i{display:block;height:100%;border-radius:6px;background:var(--teal)}
+  .pbarwrap i.over{background:var(--bad)}.pbarwrap i.low{background:var(--blue)}
+  .pct{font-variant-numeric:tabular-nums;font-weight:700;min-width:38px;text-align:right}
+  .hh{font-variant-numeric:tabular-nums;font-weight:700}.dl{font-variant-numeric:tabular-nums}
+  .legend{font-size:11.5px;color:var(--mut);margin-top:10px}
+  .nwbar{background:var(--bluebg);border-radius:9px;padding:9px 12px;margin:0 0 12px;font-size:12.5px;color:var(--ink)}
+  .nwbar b{color:var(--blue)}
+  tr.sel{background:#fff8e6}tr.sel td{border-bottom-color:#f3e3b5}
+  .nwck{width:16px;height:16px;cursor:pointer}
+  tr.grouprow td{background:#f4f6fb;color:var(--mut);font-weight:700;text-transform:uppercase;font-size:10.5px;letter-spacing:.5px;text-align:left}
+  tr.allocrow td{background:#fffdf5;border-bottom:1px solid #f3e3b5}
+  .alabel{font-size:11.5px;color:var(--warn);font-weight:700;margin-right:6px}
+  .allocitem{display:inline-flex;align-items:center;gap:4px;margin:3px 10px 3px 0;font-size:12.5px}
+  .allocitem.extra{padding:2px 6px;background:#eef0f4;border-radius:7px}
+  .anum{width:52px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;border:1px dashed #d9a441;border-radius:6px;background:#fff;color:var(--ink);padding:2px 5px}
+  .xres{border:0;background:transparent;color:var(--bad);font-weight:800;cursor:pointer;font-size:13px;line-height:1}
+  .addres{font:inherit;font-size:12px;border:1px solid var(--line);border-radius:7px;padding:3px 6px;background:#fff;color:var(--blue);font-weight:700;cursor:pointer}
+  .row{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--line)}.row:last-child{border-bottom:0}
+  .nm{font-weight:650;min-width:150px}.nm .r{font-size:11px;color:var(--mut);font-weight:500}
+  .loadwrap{flex:1;background:#eef0f4;border-radius:6px;height:16px;overflow:hidden;min-width:60px;position:relative}
+  .loadwrap i{display:block;height:100%;border-radius:6px;background:var(--blue)}.loadwrap i.over{background:var(--bad)}
+  .cap{position:absolute;top:-2px;bottom:-2px;width:2px;background:#111}
+  .empty{padding:10px 0}
+  .gscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .gtbl{border-collapse:collapse;font-size:11.5px;white-space:nowrap;table-layout:auto}
+  .gtbl th,.gtbl td{border:1px solid #e6e8ee;padding:3px 6px;overflow:hidden}
+  .gtbl th.gm{background:#2e4374;color:#fff;text-align:left;font-size:11px;vertical-align:middle}
+  .gtbl th.gmth{background:#3a5a9a;color:#fff;text-align:center;font-weight:700;font-size:11px;padding:2px 4px}
+  .gtbl th.gw{background:#eef0f4;color:var(--mut);font-weight:700;text-align:center;font-size:10px;min-width:34px;padding:2px 3px}
+  .gtbl th.gw .gwd{display:block;line-height:1.25}.gtbl th.gw .cw{display:block;font-weight:600;color:#9aa3b2;font-size:9px;line-height:1.1}
+  .gsec td{background:#2e6da4;color:#fff;font-weight:700;text-transform:uppercase;font-size:11px;letter-spacing:.4px}
+  .gtbl td.gmod{color:var(--mut)}
+  .gtbl td.gtask{font-weight:600;max-width:380px;overflow:hidden;text-overflow:ellipsis}
+  .gtbl td.gest,.gtbl td.gdt,.gtbl td.gpr,.gtbl td.gst{text-align:center;color:var(--ink)}
+  .gtbl td.gc{min-width:34px;padding:0}
+  .gc.c-prog{background:#9ec5fe}.gc.c-done{background:#a7e3bf}.gc.c-pend{background:#fcd9a8}.gc.c-todo{background:#cdd6f0}
+  .gcur{border-left:2px solid #dc2626 !important}
+  .ck{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:middle;margin:0 1px 0 5px}
+  .ck.c-prog{background:#9ec5fe}.ck.c-done{background:#a7e3bf}.ck.c-pend{background:#fcd9a8}.ck.c-todo{background:#cdd6f0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>📦 La Depozit — board PM săptămânal</h1>
+    <span class="tm">Time &amp; Materials</span>
+    <div class="sp"></div>
+    <div class="wkbox">Săpt. <span class="wklbl" id="wklbl"></span></div>
+  </div>
+  <p class="pill" style="margin:4px 0 0">Date reale din ClickUp. Bifează taskurile pt săptămâna viitoare în „② În progres" și alocă ore pe resursă. <span id="snap"></span></p>
+  <div class="statusbar" id="statusbar"></div>
+  <div class="maintabs" id="maintabs"></div>
+  <div id="main"></div>
+  <p class="pill" style="margin-top:8px">Sursă: ClickUp. „Săptămâna anterioară" = ultima săptămână încheiată (luni–duminică). Selecțiile și alocările se rețin local pe acest calculator.</p>
+</div>
+<script>
+const DATA={"prevLabel": "29 iun – 5 iul 2026", "snapshot": "6 iul 2026", "todayMon": "2026-07-06", "weekId": "2026-07-06", "prev": [{"name": "[La Depozit][New Platform][CRM] Sales Flow refactoring & fixes", "id": "869dw8fwb", "status": "in progress", "who": [["Alexandra", 15.75], ["Dragoș", 10.0]], "logged": 25.75, "est": 40.0, "pct": 137}, {"name": "[La Depozit][New Platform][CRM] LDP Connect (mobile app)", "id": "869dxk2wn", "status": "in progress", "who": [["Dragoș", 16.0]], "logged": 16.0, "est": null, "pct": null}, {"name": "[La Depozit] Analytics integration", "id": "869dtgahn", "status": "in progress", "who": [["Alexandra", 9.0], ["Dragoș", 4.0], ["Simona", 0.5]], "logged": 13.5, "est": 20.0, "pct": 80}, {"name": "Twilio integration", "id": "869du1xjf", "status": "in progress", "who": [["Dragoș", 10.0]], "logged": 10.0, "est": 40.0, "pct": 38}, {"name": "[La Depozit] QA", "id": "869d201wr", "status": "in progress", "who": [["Pierina", 8.0]], "logged": 8.0, "est": null, "pct": null}, {"name": "Unified inbox core", "id": "869du1xj1", "status": "in progress", "who": [["Dragoș", 7.0]], "logged": 7.0, "est": 80.0, "pct": 52}, {"name": "[La Depozit][New Platform] QA Analysis", "id": "869b8vx4j", "status": "in progress", "who": [["Simona", 5.5]], "logged": 5.5, "est": null, "pct": null}, {"name": "[La Depozit] Calls", "id": "869apv53r", "status": "in progress", "who": [["Simona", 1.33], ["Dragoș", 1.25], ["Alexandra", 0.25]], "logged": 2.83, "est": null, "pct": null}, {"name": "[La Depozit] PM", "id": "869d32fhg", "status": "in progress", "who": [["Simona", 2.17]], "logged": 2.17, "est": null, "pct": null}, {"name": "[La Depozit] Support Launch", "id": "869ca3yyc", "status": "in progress", "who": [["Simona", 1.5]], "logged": 1.5, "est": null, "pct": null}, {"name": "[La Depozit][New Platform][CRM] BA", "id": "869cyk2n0", "status": "in progress", "who": [["Simona", 0.5]], "logged": 0.5, "est": 120.0, "pct": 87}], "wip": [{"name": "[La Depozit][New Platform][CRM] Project development BE", "id": "869cyk5dx", "status": "in progress", "owner": "Dragoș", "ownerIds": ["Dragoș"], "est": 270.0, "spent": 251.5, "rem": 18.5, "pct": 93, "deadline": null, "grp": 0}, {"name": "[La Depozit][New Platform] QA Analysis", "id": "869b8vx4j", "status": "in progress", "owner": "Alex", "ownerIds": ["Alex"], "est": null, "spent": 104.75, "rem": null, "pct": null, "deadline": null, "grp": 0}, {"name": "[La Depozit][New Platform][CRM] BA", "id": "869cyk2n0", "status": "in progress", "owner": "Simona, Dragoș", "ownerIds": ["Simona", "Dragoș"], "est": 120.0, "spent": 103.83, "rem": 16.17, "pct": 87, "deadline": null, "grp": 0}, {"name": "[La Depozit][New Platform][CRM] Sales Flow refactoring & fixes", "id": "869dw8fwb", "status": "in progress", "owner": "Alexandra, Simona", "ownerIds": ["Alexandra", "Simona"], "est": 40.0, "spent": 54.75, "rem": -14.75, "pct": 137, "deadline": "2026-07-01", "grp": 0}, {"name": "Unified inbox core", "id": "869du1xj1", "status": "in progress", "owner": "Simona, Dragoș", "ownerIds": ["Simona", "Dragoș"], "est": 80.0, "spent": 42.0, "rem": 38.0, "pct": 52, "deadline": "2026-07-13", "grp": 0}, {"name": "[La Depozit][New Platform][CRM] LDP Connect (mobile app)", "id": "869dxk2wn", "status": "in progress", "owner": "Dragoș, Simona", "ownerIds": ["Dragoș", "Simona"], "est": null, "spent": 16.0, "rem": null, "pct": null, "deadline": "2026-07-30", "grp": 0}, {"name": "[La Depozit] Analytics integration", "id": "869dtgahn", "status": "in progress", "owner": "Simona, Alexandra, Dragoș", "ownerIds": ["Simona", "Alexandra", "Dragoș"], "est": 20.0, "spent": 16.0, "rem": 4.0, "pct": 80, "deadline": "2026-07-06", "grp": 0}, {"name": "Twilio integration", "id": "869du1xjf", "status": "in progress", "owner": "Simona, Dragoș", "ownerIds": ["Simona", "Dragoș"], "est": 40.0, "spent": 15.0, "rem": 25.0, "pct": 38, "deadline": "2026-07-13", "grp": 0}, {"name": "[La Depozit][New Platform][ERP] Padlock OTA Development", "id": "869dz528d", "status": "in progress", "owner": "Ștefan", "ownerIds": ["Ștefan"], "est": null, "spent": 8.75, "rem": null, "pct": null, "deadline": null, "grp": 0}, {"name": "[La Depozit][New Platform][ERP] Padlock OTA Estimate", "id": "869dqmk8p", "status": "ready for release", "owner": "Ștefan", "ownerIds": ["Ștefan"], "est": null, "spent": 1.5, "rem": null, "pct": null, "deadline": null, "grp": 0}, {"name": "Meta integration", "id": "869du1xk2", "status": "to do", "owner": "Simona, Dragoș", "ownerIds": ["Simona", "Dragoș"], "est": 40.0, "spent": 0.0, "rem": 40.0, "pct": 0, "deadline": "2026-08-31", "grp": 1}, {"name": "Forms integration", "id": "869du1xk9", "status": "to do", "owner": "Simona, Dragoș", "ownerIds": ["Simona", "Dragoș"], "est": 16.0, "spent": 0.0, "rem": 16.0, "pct": 0, "deadline": "2026-09-02", "grp": 1}, {"name": "Create lead from communication", "id": "869du20aw", "status": "to do", "owner": "Simona, Dragoș", "ownerIds": ["Simona", "Dragoș"], "est": 24.0, "spent": 0.0, "rem": 24.0, "pct": 0, "deadline": "2026-09-04", "grp": 1}, {"name": "[La Depozit] Check-in DEV web/mobile app", "id": "869dw8mnh", "status": "to do", "owner": "Dragoș, Simona, Pierina, George, Alexandra", "ownerIds": ["Dragoș", "Simona", "Pierina", "George", "Alexandra"], "est": null, "spent": 0.0, "rem": null, "pct": null, "deadline": null, "grp": 1}], "resInfo": {"Dragoș": ["Dragoș Burciu", "BE / TTL", 40], "Simona": ["Simona Burciu", "PM / BA", 20], "George": ["George Popescu", "BE", 40], "Pierina": ["Pierina Giusiano", "FE / QA", 40], "Alexandra": ["Alexandra Negruti", "FE", 30], "Alex": ["Alex Mateiu", "QA", 40], "Ștefan": ["Ștefan Oprea", "BE", 40]}, "resPool": ["Dragoș", "George", "Pierina", "Alexandra", "Alex", "Ștefan"], "plog": {"Dragoș": 48.25, "Alexandra": 25.0, "Simona": 11.5, "Pierina": 8.0}, "gantt": [{"tid": "869dtgahn", "module": "Analytics", "section": "Analytics & data layers", "name": "Analytics integration", "owner": "Simona, Alexandra, Dragoș", "est": "20h", "progress": 80, "status": "in progress", "start": "2026-06-19", "end": "2026-07-06", "idlabel": "T1"}, {"tid": "869dw8fwb", "module": "CRM", "section": "CRM – Sales flow", "name": "Sales Flow refactoring & fixes", "owner": "Alexandra, Simona", "est": "40h", "progress": 137, "status": "in progress", "start": "2026-06-22", "end": "2026-07-01", "idlabel": "T2"}, {"tid": "869du1xj1", "module": "CRM", "section": "CRM – Unified inbox", "name": "Unified inbox core", "owner": "Simona, Dragoș", "est": "80h", "progress": 53, "status": "in progress", "start": "2026-06-22", "end": "2026-07-13", "idlabel": "T3"}, {"tid": "869du1xjf", "module": "CRM", "section": "CRM – Unified inbox", "name": "Twilio integration", "owner": "Simona, Dragoș", "est": "40h", "progress": 38, "status": "in progress", "start": "2026-07-06", "end": "2026-07-13", "idlabel": "T4"}, {"tid": "869dxk2wn", "module": "APP", "section": "CRM – Mobile app", "name": "LDP Connect (mobile app)", "owner": "Dragoș, Simona", "est": "—", "progress": 0, "status": "in progress", "start": "2026-07-06", "end": "2026-07-30", "idlabel": "T5"}, {"tid": "869du1xk2", "module": "CRM", "section": "CRM – Unified inbox", "name": "Meta integration", "owner": "Simona, Dragoș", "est": "40h", "progress": 0, "status": "to do", "start": "2026-08-24", "end": "2026-08-31", "idlabel": "T6"}, {"tid": "869du1xk9", "module": "CRM", "section": "CRM – Unified inbox", "name": "Forms integration", "owner": "Simona, Dragoș", "est": "16h", "progress": 0, "status": "to do", "start": "2026-08-31", "end": "2026-09-02", "idlabel": "T7"}, {"tid": "869du20aw", "module": "CRM", "section": "CRM – Unified inbox", "name": "Create lead from communication", "owner": "Simona, Dragoș", "est": "24h", "progress": 0, "status": "to do", "start": "2026-09-02", "end": "2026-09-04", "idlabel": "T8"}]};
+const CU='https://app.clickup.com/t/';
+const MON=['ian','feb','mar','apr','mai','iun','iul','aug','sep','oct','noi','dec'];
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function hh(v){if(v==null)return '—';v=Math.round((+v||0)*10)/10;return (v===Math.trunc(v)?String(v):v.toFixed(1)).replace('.',',')+'h';}
+function pclass(p){return p>100?'over':(p<34?'low':'');}
+function progCell(pct){return pct==null?'—':`<div class="pbar"><div class="pbarwrap"><i class="${pclass(pct)}" style="width:${Math.min(pct,100)}%"></i></div><span class="pct">${pct}%</span></div>`;}
+function dmy(s){return s?s.split('-').reverse().join('.'):'—';}
+const STCOL={'to do':'#87909e','in progress':'#4466ff','code review':'#1090e0','review':'#1090e0','pending':'#f8ae00','discovery':'#d97706','regression':'#e0701a','done':'#6bc950','closed':'#008844','active':'#4466ff'};
+function stColor(s){return STCOL[String(s||'').toLowerCase()]||'#87909e';}
+function sdot(s){return `<span class="sdot" title="${esc(s)}" style="background:${stColor(s)}"></span>`;}
+function tlink(n,id){return id?`<a class="tl" href="${CU}${id}" target="_blank" rel="noopener">${n}</a>`:n;}
+function tnameS(t){return sdot(t.status)+tlink(esc(t.name),t.id||t.tid);}
+
+// selection + allocation state (persisted)
+var WK=(DATA.weekId||'x');
+function loadSel(){try{return new Set(JSON.parse(localStorage.getItem('ldp_nextweek_'+WK)||'[]'));}catch(e){return new Set();}}
+function loadAlloc(){try{return JSON.parse(localStorage.getItem('ldp_alloc_'+WK)||'{}');}catch(e){return {};}}
+let NEXT=loadSel(), ALLOC=loadAlloc();
+function saveSel(){try{localStorage.setItem('ldp_nextweek_'+WK,JSON.stringify([...NEXT]));}catch(e){}}
+function saveAlloc(){try{localStorage.setItem('ldp_alloc_'+WK,JSON.stringify(ALLOC));}catch(e){}}
+function toggleNext(id){if(NEXT.has(id))NEXT.delete(id);else NEXT.add(id);saveSel();render();}
+function clearNext(){NEXT=new Set();saveSel();render();}
+function setAlloc(id,name,v){if(!ALLOC[id])ALLOC[id]={};ALLOC[id][name]=(v===''?0:+v);saveAlloc();
+  let p=0;DATA.wip.filter(t=>NEXT.has(t.id)).forEach(t=>{const a=ALLOC[t.id]||{};Object.keys(a).forEach(n=>p+=(+a[n]||0));});
+  const el=document.getElementById('plannedtot');if(el)el.textContent=hh(p);}
+function addRes(id,name){if(!name)return;if(!ALLOC[id])ALLOC[id]={};if(!(name in ALLOC[id]))ALLOC[id][name]=0;saveAlloc();render();}
+function delRes(id,name){if(ALLOC[id])delete ALLOC[id][name];saveAlloc();render();}
+
+document.getElementById('wklbl').textContent=DATA.prevLabel;
+document.getElementById('snap').textContent='Snapshot: '+DATA.snapshot+'.';
+function renderStatus(){
+  const totPrev=DATA.prev.reduce((s,t)=>s+t.logged,0);
+  const act=DATA.wip.filter(t=>t.grp===0).length, td=DATA.wip.filter(t=>t.grp===1).length;
+  document.getElementById('statusbar').innerHTML=
+   `<span class="spill b-blue">⏱ ${hh(totPrev)} logate săpt. trecută</span>
+    <span class="spill b-mut">🔵 ${act} în progres</span>
+    <span class="spill b-mut">🗒 ${td} de făcut</span>
+    <span class="spill b-teal">⭐ ${NEXT.size} pt săpt. viitoare</span>`;
+}
+const TABS=[['prev','① Săptămâna anterioară'],['wip','② În progres'],['load','③ Planificare resurse'],['gantt','📅 Gantt']];
+let tab='prev';
+
+function viewPrev(){
+  const tot=DATA.prev.reduce((s,t)=>s+t.logged,0);
+  let h=`<div class="panel"><div class="sec"><span class="ic done">✓</span> Ce s-a lucrat săptămâna trecută (${esc(DATA.prevLabel)})</div>
+    <div class="secsub">Toate taskurile pe care s-a logat (chiar dacă s-au închis ulterior). Progres total = timp logat ÷ estimare ClickUp.</div>
+    <div style="overflow-x:auto"><table>
+    <tr><th class="l">Task</th><th class="l">Cine (ore săpt.)</th><th>Ore săpt.</th><th>Estimare</th><th>Progres total</th></tr>`;
+  DATA.prev.forEach(t=>{const whoTxt=t.who.map(w=>`${esc(w[0])} ${hh(w[1])}`).join(' · ');
+    h+=`<tr><td class="l tname">${tnameS(t)}</td><td class="l who">${whoTxt}</td>
+      <td class="hh">${hh(t.logged)}</td><td class="hh">${t.est==null?'—':hh(t.est)}</td><td>${progCell(t.pct)}</td></tr>`;});
+  h+=`<tr class="tot"><td class="l">Total logat</td><td></td><td class="hh">${hh(tot)}</td><td></td><td></td></tr></table></div></div>`;
+  return h;
+}
+
+function allocRow(t){
+  const a=ALLOC[t.id]||{}, owners=(t.ownerIds||[]).filter(n=>DATA.resPool.indexOf(n)>=0);
+  const extra=Object.keys(a).filter(n=>owners.indexOf(n)<0 && DATA.resPool.indexOf(n)>=0);
+  const names=owners.concat(extra);
+  const items=names.map(n=>{const isE=owners.indexOf(n)<0;const v=(a[n]!=null&&a[n]!==0)?a[n]:'';
+    return `<span class="allocitem${isE?' extra':''}"><b>${esc(n)}</b> <input type="number" min="0" step="0.5" class="anum" value="${v}" placeholder="0" oninput="setAlloc('${t.id}','${esc(n)}',this.value)">h${isE?` <button class="xres" title="scoate" onclick="delRes('${t.id}','${esc(n)}')">×</button>`:''}</span>`;}).join('');
+  const avail=DATA.resPool.filter(n=>names.indexOf(n)<0);
+  const sel=avail.length?`<select class="addres" onchange="addRes('${t.id}',this.value);this.value=''"><option value="">+ resursă extra</option>${avail.map(n=>`<option>${esc(n)}</option>`).join('')}</select>`:'';
+  return `<tr class="allocrow"><td></td><td colspan="6"><span class="alabel">Ore săpt. viitoare:</span> ${items} ${sel}</td></tr>`;
+}
+
+function viewWip(){
+  const sel=DATA.wip.filter(t=>NEXT.has(t.id));
+  let planned=0; sel.forEach(t=>{const a=ALLOC[t.id]||{};Object.keys(a).forEach(n=>planned+=(+a[n]||0));});
+  let h=`<div class="panel"><div class="sec"><span class="ic prog">◐</span> Taskuri în progres &amp; de făcut</div>
+    <div class="secsub">Bifează „Plan" pt taskurile lucrate săptămâna viitoare; sub fiecare task bifat aloci orele pe resursă. To-do sunt la coada listei.</div>
+    <div class="nwbar">📌 Săpt. viitoare: <b>${sel.length}</b> taskuri · <b id="plannedtot">${hh(planned)}</b> planificate <button class="btn" style="margin-left:8px;padding:3px 9px;border:1px solid var(--line);background:#fff;border-radius:8px;font-weight:700;cursor:pointer" onclick="clearNext()">golește</button></div>
+    <div style="overflow-x:auto"><table>
+    <tr><th>Plan</th><th class="l">Task</th><th class="l">Owner</th><th>Logat</th><th>Rămas</th><th>Deadline</th><th>Progres</th></tr>`;
+  let lastgrp=0;
+  DATA.wip.forEach(t=>{
+    if(t.grp===1&&lastgrp===0){h+=`<tr class="grouprow"><td></td><td colspan="6">De făcut (to-do)</td></tr>`;lastgrp=1;}
+    const on=NEXT.has(t.id);
+    h+=`<tr class="${on?'sel':''}"><td style="text-align:center"><input type="checkbox" class="nwck" ${on?'checked':''} onclick="toggleNext('${t.id}')"></td>
+      <td class="l tname">${on?'⭐ ':''}${tnameS(t)}</td><td class="l who owncell" title="${esc(t.owner)}">${esc(t.owner)}</td>
+      <td class="hh">${hh(t.spent)}</td>
+      <td class="hh">${t.rem==null?'—':hh(t.rem)}</td><td class="dl">${dmy(t.deadline)}</td><td>${progCell(t.pct)}</td></tr>`;
+    if(on)h+=allocRow(t);
+  });
+  h+=`</table></div><p class="legend">⭐ + galben = selectat. Orele alocate se adună automat în „③ Planificare resurse". „Rămas" = estimare − logat.</p></div>`;
+  return h;
+}
+
+function viewLoad(){
+  const sel=DATA.wip.filter(t=>NEXT.has(t.id));
+  const tot={}; DATA.resPool.forEach(n=>tot[n]=0);
+  sel.forEach(t=>{const a=ALLOC[t.id]||{};Object.keys(a).forEach(n=>{tot[n]=(tot[n]||0)+(+a[n]||0);});});
+  const maxv=Math.max(...DATA.resPool.map(n=>Math.max(tot[n]||0,DATA.resInfo[n][2])),1);
+  const rows=DATA.resPool.map(n=>{const cap=DATA.resInfo[n][2],val=tot[n]||0,over=val>cap;
+    const wpct=val/maxv*100,cpct=cap/maxv*100,pct=cap?Math.round(val/cap*100):0;
+    return `<div class="row"><div class="nm">${esc(DATA.resInfo[n][0])}<div class="r">${esc(DATA.resInfo[n][1])}</div></div>
+      <div class="loadwrap"><i class="${over?'over':''}" style="width:${Math.min(wpct,100)}%"></i><div class="cap" style="left:${Math.min(cpct,100)}%"></div></div>
+      <div class="pct" style="min-width:155px;text-align:right"><span class="hh" style="color:${over?'var(--bad)':'var(--ink)'}">${hh(val)}</span><span class="who"> / ${hh(cap)} (${pct}%)</span></div></div>`;}).join('');
+  const totAll=DATA.resPool.reduce((s,n)=>s+(tot[n]||0),0);
+  let h=`<div class="panel"><div class="sec"><span class="ic who">👥</span> Planificare resurse — săpt. viitoare</div>
+    <div class="secsub">Total ore pe persoană, însumate de pe taskurile bifate. Linia neagră = capacitate săptămânală.</div>${rows}
+    <div class="legend">Total ore planificate: <b>${hh(totAll)}</b></div></div>`;
+  if(sel.length){
+    h+=`<div class="panel"><div class="sec"><span class="ic next">🧮</span> Detaliu pe taskuri</div><div style="overflow-x:auto"><table>
+      <tr><th class="l">Task</th><th class="l">Alocări (resursă: ore)</th><th>Total task</th></tr>`;
+    sel.forEach(t=>{const a=ALLOC[t.id]||{};const parts=Object.keys(a).filter(n=>+a[n]>0).map(n=>`${esc(n)}: ${hh(a[n])}`);
+      const tt=Object.keys(a).reduce((s,n)=>s+(+a[n]||0),0);
+      h+=`<tr><td class="l tname">${tnameS(t)}</td><td class="l who">${parts.length?parts.join(' · '):'<span style="color:var(--mut)">— nealocat încă —</span>'}</td><td class="hh">${hh(tt)}</td></tr>`;});
+    h+=`</table></div></div>`;
+  } else {
+    h+=`<div class="panel"><div class="empty" style="color:var(--mut)">Bifează taskuri în „② În progres" și introdu orele pe resursă ca să vezi încărcarea aici.</div></div>`;
+  }
+  return h;
+}
+
+function stcls(s){return 'st '+String(s||'').replace(/[^a-z]/gi,'').toLowerCase();}
+function _d(s){var p=s.split('-');return new Date(+p[0],+p[1]-1,+p[2]);}
+function _mon(d){var x=new Date(d.getFullYear(),d.getMonth(),d.getDate());var g=(x.getDay()+6)%7;x.setDate(x.getDate()-g);return x;}
+function _isoweek(d){var t=new Date(d.getFullYear(),d.getMonth(),d.getDate());var dn=(t.getDay()+6)%7;t.setDate(t.getDate()-dn+3);var f=new Date(t.getFullYear(),0,4);var fn=(f.getDay()+6)%7;f.setDate(f.getDate()-fn+3);return 1+Math.round((t-f)/6048e5);}
+function _dmy(s){var p=s.split('-');return p[2]+'/'+p[1]+'/'+p[0];}
+function _cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
+function gcls(s){s=String(s||'').toLowerCase();if(s.indexOf('progress')>=0)return 'c-prog';if(s.indexOf('done')>=0||s.indexOf('closed')>=0)return 'c-done';if(s.indexOf('pending')>=0||s.indexOf('discovery')>=0||s.indexOf('review')>=0)return 'c-pend';return 'c-todo';}
+function viewGantt(){
+  var G=(DATA.gantt||[]).slice();
+  if(!G.length) return '<div class="panel"><div class="empty">Niciun task cu start ȘI deadline.</div></div>';
+  var starts=G.map(function(t){return _mon(_d(t.start)).getTime();});
+  var ends=G.map(function(t){return _d(t.end).getTime();});
+  var first=_mon(new Date(Math.min.apply(null,starts)));
+  var lastEnd=new Date(Math.max.apply(null,ends));
+  var weeksA=[]; var w=new Date(first);
+  while(w.getTime()<=lastEnd.getTime()){weeksA.push(new Date(w)); w.setDate(w.getDate()+7);}
+  var todayMon=_mon(DATA.todayMon?_d(DATA.todayMon):new Date()).getTime();
+  var groups=[]; weeksA.forEach(function(wd){var key=wd.getFullYear()+'-'+wd.getMonth();var g=groups[groups.length-1];if(g&&g.key===key){g.span++;}else{groups.push({key:key,lbl:_cap(MON[wd.getMonth()])+' '+wd.getFullYear(),span:1});}});
+  var META=['Modul','Task / livrabil','Est','Start','End','Status','Progres'];
+  var thead='<tr>'+META.map(function(m){return '<th class="gm" rowspan="2">'+m+'</th>';}).join('')+groups.map(function(g){return '<th class="gmth" colspan="'+g.span+'">'+esc(g.lbl)+'</th>';}).join('')+'</tr>';
+  thead+='<tr>'+weeksA.map(function(wd){var cur=_mon(wd).getTime()===todayMon?' gcur':'';return '<th class="gw'+cur+'"><span class="gwd">'+wd.getDate()+' '+MON[wd.getMonth()]+'</span><span class="cw">CW'+_isoweek(wd)+'</span></th>';}).join('')+'</tr>';
+  G.sort(function(a,b){return _d(a.start)-_d(b.start) || _d(a.end)-_d(b.end);});
+  var body='';
+  G.forEach(function(t){
+      var ts=_d(t.start).getTime(), te=_d(t.end).getTime(); if(te<=ts){te=ts+864e5;}
+      var cells=weeksA.map(function(wd){var ws=wd.getTime();var on=(ws<te)&&((ws+7*864e5)>ts);var cur=_mon(wd).getTime()===todayMon?' gcur':'';return '<td class="gc'+cur+(on?(' '+gcls(t.status)):'')+'"></td>';}).join('');
+      body+='<tr><td class="gmod">'+esc(t.module)+'</td>'+
+        '<td class="gtask">'+(NEXT.has(t.tid)?'⭐ ':'')+tlink(esc(t.name),t.tid)+'</td>'+
+        '<td class="gest">'+esc(t.est)+'</td><td class="gdt">'+_dmy(t.start)+'</td><td class="gdt">'+_dmy(t.end)+'</td>'+
+        '<td class="gst">'+sdot(t.status)+'</td>'+
+        '<td class="gpr">'+(t.progress||0)+'%</td>'+cells+'</tr>';
+  });
+  return '<div class="panel"><div class="sec"><span class="ic next">📅</span> Plan saptamanal (Gantt)</div>'+
+    '<div class="gscroll"><table class="gtbl">'+thead+body+'</table></div>'+
+    '<p class="legend">Linie rosie = saptamana curenta. ⭐ = selectat pt saptamana viitoare. Doar taskurile cu start ȘI deadline in ClickUp apar aici.</p></div>';
+}
+
+function render(){
+  renderStatus();
+  document.getElementById('maintabs').innerHTML=TABS.map(function(x){return '<button class="'+(tab===x[0]?'on':'')+'" onclick="setTab(\''+x[0]+'\')">'+x[1]+'</button>';}).join('');
+  document.getElementById('main').innerHTML = tab==='prev'?viewPrev():tab==='wip'?viewWip():tab==='load'?viewLoad():viewGantt();
+}
+function setTab(t){tab=t;render();}
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,565 @@
+{
+  "prevLabel": "29 iun – 5 iul 2026",
+  "snapshot": "6 iul 2026",
+  "todayMon": "2026-07-06",
+  "weekId": "2026-07-06",
+  "prev": [
+    {
+      "name": "[La Depozit][New Platform][CRM] Sales Flow refactoring & fixes",
+      "id": "869dw8fwb",
+      "status": "in progress",
+      "who": [
+        [
+          "Alexandra",
+          15.75
+        ],
+        [
+          "Dragoș",
+          10.0
+        ]
+      ],
+      "logged": 25.75,
+      "est": 40.0,
+      "pct": 137
+    },
+    {
+      "name": "[La Depozit][New Platform][CRM] LDP Connect (mobile app)",
+      "id": "869dxk2wn",
+      "status": "in progress",
+      "who": [
+        [
+          "Dragoș",
+          16.0
+        ]
+      ],
+      "logged": 16.0,
+      "est": null,
+      "pct": null
+    },
+    {
+      "name": "[La Depozit] Analytics integration",
+      "id": "869dtgahn",
+      "status": "in progress",
+      "who": [
+        [
+          "Alexandra",
+          9.0
+        ],
+        [
+          "Dragoș",
+          4.0
+        ],
+        [
+          "Simona",
+          0.5
+        ]
+      ],
+      "logged": 13.5,
+      "est": 20.0,
+      "pct": 80
+    },
+    {
+      "name": "Twilio integration",
+      "id": "869du1xjf",
+      "status": "in progress",
+      "who": [
+        [
+          "Dragoș",
+          10.0
+        ]
+      ],
+      "logged": 10.0,
+      "est": 40.0,
+      "pct": 38
+    },
+    {
+      "name": "[La Depozit] QA",
+      "id": "869d201wr",
+      "status": "in progress",
+      "who": [
+        [
+          "Pierina",
+          8.0
+        ]
+      ],
+      "logged": 8.0,
+      "est": null,
+      "pct": null
+    },
+    {
+      "name": "Unified inbox core",
+      "id": "869du1xj1",
+      "status": "in progress",
+      "who": [
+        [
+          "Dragoș",
+          7.0
+        ]
+      ],
+      "logged": 7.0,
+      "est": 80.0,
+      "pct": 52
+    },
+    {
+      "name": "[La Depozit][New Platform] QA Analysis",
+      "id": "869b8vx4j",
+      "status": "in progress",
+      "who": [
+        [
+          "Simona",
+          5.5
+        ]
+      ],
+      "logged": 5.5,
+      "est": null,
+      "pct": null
+    },
+    {
+      "name": "[La Depozit] Calls",
+      "id": "869apv53r",
+      "status": "in progress",
+      "who": [
+        [
+          "Simona",
+          1.33
+        ],
+        [
+          "Dragoș",
+          1.25
+        ],
+        [
+          "Alexandra",
+          0.25
+        ]
+      ],
+      "logged": 2.83,
+      "est": null,
+      "pct": null
+    },
+    {
+      "name": "[La Depozit] PM",
+      "id": "869d32fhg",
+      "status": "in progress",
+      "who": [
+        [
+          "Simona",
+          2.17
+        ]
+      ],
+      "logged": 2.17,
+      "est": null,
+      "pct": null
+    },
+    {
+      "name": "[La Depozit] Support Launch",
+      "id": "869ca3yyc",
+      "status": "in progress",
+      "who": [
+        [
+          "Simona",
+          1.5
+        ]
+      ],
+      "logged": 1.5,
+      "est": null,
+      "pct": null
+    },
+    {
+      "name": "[La Depozit][New Platform][CRM] BA",
+      "id": "869cyk2n0",
+      "status": "in progress",
+      "who": [
+        [
+          "Simona",
+          0.5
+        ]
+      ],
+      "logged": 0.5,
+      "est": 120.0,
+      "pct": 87
+    }
+  ],
+  "wip": [
+    {
+      "name": "[La Depozit][New Platform][CRM] Project development BE",
+      "id": "869cyk5dx",
+      "status": "in progress",
+      "owner": "Dragoș",
+      "ownerIds": [
+        "Dragoș"
+      ],
+      "est": 270.0,
+      "spent": 251.5,
+      "rem": 18.5,
+      "pct": 93,
+      "deadline": null,
+      "grp": 0
+    },
+    {
+      "name": "[La Depozit][New Platform] QA Analysis",
+      "id": "869b8vx4j",
+      "status": "in progress",
+      "owner": "Alex",
+      "ownerIds": [
+        "Alex"
+      ],
+      "est": null,
+      "spent": 104.75,
+      "rem": null,
+      "pct": null,
+      "deadline": null,
+      "grp": 0
+    },
+    {
+      "name": "[La Depozit][New Platform][CRM] BA",
+      "id": "869cyk2n0",
+      "status": "in progress",
+      "owner": "Simona, Dragoș",
+      "ownerIds": [
+        "Simona",
+        "Dragoș"
+      ],
+      "est": 120.0,
+      "spent": 103.83,
+      "rem": 16.17,
+      "pct": 87,
+      "deadline": null,
+      "grp": 0
+    },
+    {
+      "name": "[La Depozit][New Platform][CRM] Sales Flow refactoring & fixes",
+      "id": "869dw8fwb",
+      "status": "in progress",
+      "owner": "Alexandra, Simona",
+      "ownerIds": [
+        "Alexandra",
+        "Simona"
+      ],
+      "est": 40.0,
+      "spent": 54.75,
+      "rem": -14.75,
+      "pct": 137,
+      "deadline": "2026-07-01",
+      "grp": 0
+    },
+    {
+      "name": "Unified inbox core",
+      "id": "869du1xj1",
+      "status": "in progress",
+      "owner": "Simona, Dragoș",
+      "ownerIds": [
+        "Simona",
+        "Dragoș"
+      ],
+      "est": 80.0,
+      "spent": 42.0,
+      "rem": 38.0,
+      "pct": 52,
+      "deadline": "2026-07-13",
+      "grp": 0
+    },
+    {
+      "name": "[La Depozit][New Platform][CRM] LDP Connect (mobile app)",
+      "id": "869dxk2wn",
+      "status": "in progress",
+      "owner": "Dragoș, Simona",
+      "ownerIds": [
+        "Dragoș",
+        "Simona"
+      ],
+      "est": null,
+      "spent": 16.0,
+      "rem": null,
+      "pct": null,
+      "deadline": "2026-07-30",
+      "grp": 0
+    },
+    {
+      "name": "[La Depozit] Analytics integration",
+      "id": "869dtgahn",
+      "status": "in progress",
+      "owner": "Simona, Alexandra, Dragoș",
+      "ownerIds": [
+        "Simona",
+        "Alexandra",
+        "Dragoș"
+      ],
+      "est": 20.0,
+      "spent": 16.0,
+      "rem": 4.0,
+      "pct": 80,
+      "deadline": "2026-07-06",
+      "grp": 0
+    },
+    {
+      "name": "Twilio integration",
+      "id": "869du1xjf",
+      "status": "in progress",
+      "owner": "Simona, Dragoș",
+      "ownerIds": [
+        "Simona",
+        "Dragoș"
+      ],
+      "est": 40.0,
+      "spent": 15.0,
+      "rem": 25.0,
+      "pct": 38,
+      "deadline": "2026-07-13",
+      "grp": 0
+    },
+    {
+      "name": "[La Depozit][New Platform][ERP] Padlock OTA Development",
+      "id": "869dz528d",
+      "status": "in progress",
+      "owner": "Ștefan",
+      "ownerIds": [
+        "Ștefan"
+      ],
+      "est": null,
+      "spent": 8.75,
+      "rem": null,
+      "pct": null,
+      "deadline": null,
+      "grp": 0
+    },
+    {
+      "name": "[La Depozit][New Platform][ERP] Padlock OTA Estimate",
+      "id": "869dqmk8p",
+      "status": "ready for release",
+      "owner": "Ștefan",
+      "ownerIds": [
+        "Ștefan"
+      ],
+      "est": null,
+      "spent": 1.5,
+      "rem": null,
+      "pct": null,
+      "deadline": null,
+      "grp": 0
+    },
+    {
+      "name": "Meta integration",
+      "id": "869du1xk2",
+      "status": "to do",
+      "owner": "Simona, Dragoș",
+      "ownerIds": [
+        "Simona",
+        "Dragoș"
+      ],
+      "est": 40.0,
+      "spent": 0.0,
+      "rem": 40.0,
+      "pct": 0,
+      "deadline": "2026-08-31",
+      "grp": 1
+    },
+    {
+      "name": "Forms integration",
+      "id": "869du1xk9",
+      "status": "to do",
+      "owner": "Simona, Dragoș",
+      "ownerIds": [
+        "Simona",
+        "Dragoș"
+      ],
+      "est": 16.0,
+      "spent": 0.0,
+      "rem": 16.0,
+      "pct": 0,
+      "deadline": "2026-09-02",
+      "grp": 1
+    },
+    {
+      "name": "Create lead from communication",
+      "id": "869du20aw",
+      "status": "to do",
+      "owner": "Simona, Dragoș",
+      "ownerIds": [
+        "Simona",
+        "Dragoș"
+      ],
+      "est": 24.0,
+      "spent": 0.0,
+      "rem": 24.0,
+      "pct": 0,
+      "deadline": "2026-09-04",
+      "grp": 1
+    },
+    {
+      "name": "[La Depozit] Check-in DEV web/mobile app",
+      "id": "869dw8mnh",
+      "status": "to do",
+      "owner": "Dragoș, Simona, Pierina, George, Alexandra",
+      "ownerIds": [
+        "Dragoș",
+        "Simona",
+        "Pierina",
+        "George",
+        "Alexandra"
+      ],
+      "est": null,
+      "spent": 0.0,
+      "rem": null,
+      "pct": null,
+      "deadline": null,
+      "grp": 1
+    }
+  ],
+  "resInfo": {
+    "Dragoș": [
+      "Dragoș Burciu",
+      "BE / TTL",
+      40
+    ],
+    "Simona": [
+      "Simona Burciu",
+      "PM / BA",
+      20
+    ],
+    "George": [
+      "George Popescu",
+      "BE",
+      40
+    ],
+    "Pierina": [
+      "Pierina Giusiano",
+      "FE / QA",
+      40
+    ],
+    "Alexandra": [
+      "Alexandra Negruti",
+      "FE",
+      30
+    ],
+    "Alex": [
+      "Alex Mateiu",
+      "QA",
+      40
+    ],
+    "Ștefan": [
+      "Ștefan Oprea",
+      "BE",
+      40
+    ]
+  },
+  "resPool": [
+    "Dragoș",
+    "George",
+    "Pierina",
+    "Alexandra",
+    "Alex",
+    "Ștefan"
+  ],
+  "plog": {
+    "Dragoș": 48.25,
+    "Alexandra": 25.0,
+    "Simona": 11.5,
+    "Pierina": 8.0
+  },
+  "gantt": [
+    {
+      "tid": "869dtgahn",
+      "module": "Analytics",
+      "section": "Analytics & data layers",
+      "name": "Analytics integration",
+      "owner": "Simona, Alexandra, Dragoș",
+      "est": "20h",
+      "progress": 80,
+      "status": "in progress",
+      "start": "2026-06-19",
+      "end": "2026-07-06",
+      "idlabel": "T1"
+    },
+    {
+      "tid": "869dw8fwb",
+      "module": "CRM",
+      "section": "CRM – Sales flow",
+      "name": "Sales Flow refactoring & fixes",
+      "owner": "Alexandra, Simona",
+      "est": "40h",
+      "progress": 137,
+      "status": "in progress",
+      "start": "2026-06-22",
+      "end": "2026-07-01",
+      "idlabel": "T2"
+    },
+    {
+      "tid": "869du1xj1",
+      "module": "CRM",
+      "section": "CRM – Unified inbox",
+      "name": "Unified inbox core",
+      "owner": "Simona, Dragoș",
+      "est": "80h",
+      "progress": 53,
+      "status": "in progress",
+      "start": "2026-06-22",
+      "end": "2026-07-13",
+      "idlabel": "T3"
+    },
+    {
+      "tid": "869du1xjf",
+      "module": "CRM",
+      "section": "CRM – Unified inbox",
+      "name": "Twilio integration",
+      "owner": "Simona, Dragoș",
+      "est": "40h",
+      "progress": 38,
+      "status": "in progress",
+      "start": "2026-07-06",
+      "end": "2026-07-13",
+      "idlabel": "T4"
+    },
+    {
+      "tid": "869dxk2wn",
+      "module": "APP",
+      "section": "CRM – Mobile app",
+      "name": "LDP Connect (mobile app)",
+      "owner": "Dragoș, Simona",
+      "est": "—",
+      "progress": 0,
+      "status": "in progress",
+      "start": "2026-07-06",
+      "end": "2026-07-30",
+      "idlabel": "T5"
+    },
+    {
+      "tid": "869du1xk2",
+      "module": "CRM",
+      "section": "CRM – Unified inbox",
+      "name": "Meta integration",
+      "owner": "Simona, Dragoș",
+      "est": "40h",
+      "progress": 0,
+      "status": "to do",
+      "start": "2026-08-24",
+      "end": "2026-08-31",
+      "idlabel": "T6"
+    },
+    {
+      "tid": "869du1xk9",
+      "module": "CRM",
+      "section": "CRM – Unified inbox",
+      "name": "Forms integration",
+      "owner": "Simona, Dragoș",
+      "est": "16h",
+      "progress": 0,
+      "status": "to do",
+      "start": "2026-08-31",
+      "end": "2026-09-02",
+      "idlabel": "T7"
+    },
+    {
+      "tid": "869du20aw",
+      "module": "CRM",
+      "section": "CRM – Unified inbox",
+      "name": "Create lead from communication",
+      "owner": "Simona, Dragoș",
+      "est": "24h",
+      "progress": 0,
+      "status": "to do",
+      "start": "2026-09-02",
+      "end": "2026-09-04",
+      "idlabel": "T8"
+    }
+  ]
+}
