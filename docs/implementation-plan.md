@@ -142,6 +142,15 @@ O sincronizare repetată este idempotentă, nu produce duplicate și nu șterge 
 
 Ecranul reproduce prezentarea și valorile capturii „Plan vs Realizat” pe aceleași date de intrare, iar corecțiile respectă fluxul de ajustări auditate și permisiunile definite în specificație.
 
+### Status implementare — 11 iulie 2026
+
+- În progres: primul vertical slice „Plan (ore)” este funcțional end-to-end.
+- Implementat: scope global pentru Admin/Management și scope pe membrii echipelor conduse pentru Team Lead, aplicat identic la citire și scriere.
+- Implementat: perioada mai–decembrie 2026 derivată din setări sau, ca fallback, din alocările importate; matrice persoană × proiect × rol, filtre, subtotaluri și total general.
+- Implementat: editare în pași de `0,25h`, autosave la blur/Enter, audit `created_by`/`updated_by`, feedback vizibil și rollback la eroare.
+- Implementat: pagină Inertia, componente shadcn, navigație condiționată de permisiune și rute TypeScript generate cu Wayfinder.
+- Următorul slice: „Realizat” și „Plan vs Realizat”, inclusiv ajustările auditate. Acesta poate fi construit și testat cu fixture-uri înainte de obținerea tokenului ClickUp cu acces la pontaje.
+
 ---
 
 ## Milestone 4 — View Management
