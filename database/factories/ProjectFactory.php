@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\ProjectBoardTemplate;
 use App\Models\Project;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -24,11 +25,7 @@ class ProjectFactory extends Factory
             'client' => fake()->company(),
             'name' => fake()->unique()->words(3, true),
             'folder_name' => fake()->words(3, true),
-            'contract_type' => fake()->randomElement([
-                'fixed-price',
-                'retainer',
-                'time-and-materials',
-            ]),
+            'contract_type' => fake()->randomElement(ProjectBoardTemplate::cases()),
             'board_visible' => true,
             'active' => true,
         ];

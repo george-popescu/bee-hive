@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ProjectBoardTemplate;
 use Database\Factories\ProjectFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -9,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/** @property ProjectBoardTemplate|null $contract_type */
 #[Fillable([
     'clickup_space_id',
     'clickup_folder_id',
@@ -74,6 +76,7 @@ class Project extends Model
         return [
             'board_visible' => 'boolean',
             'active' => 'boolean',
+            'contract_type' => ProjectBoardTemplate::class,
         ];
     }
 }

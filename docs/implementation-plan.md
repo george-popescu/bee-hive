@@ -199,6 +199,16 @@ Procentele, orele și culorile coincid cu dashboardul de referință pe aceleaș
 
 Boardul reproduce comportamentul T&M agreat și valorile ClickUp pentru perioada selectată.
 
+### Status implementare — 11 iulie 2026
+
+- Finalizat: un singur board PM generic, cu tab-uri pe proiect, etichetă de contract și filtrare după PM, limitat la proiectele administrate pentru rolul PM și global pentru Management/Admin.
+- Finalizat: perioade săptămânale luni–duminică și lunare, navigare înainte/înapoi, modurile Prezentare/Editare și starea ultimei sincronizări.
+- Finalizat: rezumat KPI și secțiuni pentru taskurile lucrate, taskurile active, contributorii perioadei și efortul rămas; linkurile, statusurile, ownerii, estimările și pontajele ClickUp rămân read-only.
+- Finalizat: progres total pe baza tuturor pontajelor taskului, orele perioadei agregate separat și semnalizarea depășirii peste 110%.
+- Finalizat: refresh ClickUp pus în coadă prin endpoint autorizat, fără write-back în ClickUp.
+- Verificat: 114 teste / 771 aserțiuni, PHPStan, Pint, Prettier, ESLint, TypeScript, build și QA în browser pe proiectul de referință „La Depozit”, inclusiv săptămână/lună și fără erori în consolă.
+- Limitare operațională izolată: structura și taskurile live sunt vizibile; pontajele tuturor membrilor vor fi validate live după obținerea tokenului ClickUp cu acces complet la time entries.
+
 ---
 
 ## Milestone 6 — Board PM pentru proiecte cu livrabile

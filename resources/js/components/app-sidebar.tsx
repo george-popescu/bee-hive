@@ -2,6 +2,7 @@ import { Link, usePage } from '@inertiajs/react';
 import {
     BookOpen,
     ChartNoAxesCombined,
+    ClipboardList,
     FolderGit2,
     LayoutGrid,
     UsersRound,
@@ -21,6 +22,7 @@ import {
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import { index as managementIndex } from '@/routes/management';
+import { index as pmBoardIndex } from '@/routes/pm_board';
 import { index as teamLeadIndex } from '@/routes/team_lead';
 import type { NavItem } from '@/types';
 
@@ -41,6 +43,12 @@ const mainNavItems: Array<NavItem & { permission?: string }> = [
         href: teamLeadIndex(),
         icon: UsersRound,
         permission: 'team-lead.view',
+    },
+    {
+        title: 'Board-uri PM',
+        href: pmBoardIndex(),
+        icon: ClipboardList,
+        permission: 'pm-boards.view',
     },
 ];
 

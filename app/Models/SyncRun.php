@@ -8,10 +8,14 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 /**
  * @property array<string, int>|null $counters
  * @property array<string, mixed>|null $options
+ * @property SyncRunStatus $status
+ * @property Carbon|null $started_at
+ * @property Carbon|null $finished_at
  */
 #[Fillable([
     'source',
