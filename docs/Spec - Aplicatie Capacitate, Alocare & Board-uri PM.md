@@ -1,16 +1,16 @@
 # Spec de proiect — Aplicație internă BEE CODED: Capacitate, Alocare & Board-uri PM
 
 > Document pentru programator. Scop: construirea unei aplicații web noi (frontend + backend + bază de date), sincronizată cu ClickUp, cu **3 view-uri pe roluri**:
-> 1. **Management** — Utilizare echipă (Est. vs Real.) + acoperire cost, overview la nivel de firmă.
+> 1. **Management** — Utilizare echipă (Est. vs Real.), overview la nivel de firmă. Acoperirea costului rămâne pentru o fază ulterioară, după clarificarea formulei.
 > 2. **PM** — board-uri săptămânale per proiect, trase din ClickUp (un template configurabil: T&M sau livrabile/Gantt).
 > 3. **Team Lead** — alocarea oamenilor pe proiecte (Plan în ore + Plan vs Realizat).
 >
-> Există deja **trei prototipuri HTML** care arată exact comportamentul dorit și sunt sursa de adevăr pentru reguli și UI:
+> Există deja **trei prototipuri HTML** care documentează comportamentul vizual dorit și oferă date pentru regresie:
 > - `Capacity Board.html` + `capacity_data.json` — alocare + utilizare (view-urile Management și Team Lead).
 > - `MiM_Board_PM_Iunie.html` — board PM stil **T&M** (săptămână/lună).
 > - `La_Depozit_Board_PM_Saptamanal.html` — board PM stil **săptămânal cu Gantt** (livrabile).
 >
-> Sarcina nu e să portezi fișierele HTML, ci să construiești o aplicație reală: persistență în DB, API, sincronizare ClickUp și mai mulți utilizatori cu roluri. Prototipurile rămân referința vizuală și de calcul.
+> Sarcina nu e să portezi fișierele HTML, ci să construiești o aplicație reală: persistență în DB, API, sincronizare ClickUp și mai mulți utilizatori cu roluri. **Specificația scrisă este sursa regulilor de business**; prototipurile rămân referințe vizuale și seturi de date pentru regresie.
 
 ---
 
@@ -26,11 +26,11 @@ Orizontul de planificare curent este **Mai 2026 → Dec 2026** (8 luni), dar num
 Obiectivul acestui modul (subsetul cerut acum din tot boardul):
 
 1. Editarea planului de alocare (ore/lună per persoană × proiect).
-2. Editarea realizatului (ore/lună) — inclusiv direct din view-ul comparativ.
+2. Vizualizarea realizatului sincronizat din ClickUp și, pentru utilizatorii autorizați, introducerea de ajustări separate și auditate.
 3. Vizualizarea **Plan vs Realizat** în paralel, cu semnalizare pe culori a abaterilor.
-4. Vizualizarea **Utilizare echipă** (Est. vs Real. ca % din normă), cu semnalizare pe culori a supra/sub-încărcării.
+4. Vizualizarea **Utilizare echipă** (Est. vs Real. ca % din capacitatea disponibilă după concediu), cu semnalizare pe culori a supra/sub-încărcării.
 
-Ce **nu** intră în acest proiect (rămâne pe restul boardului, doar de ținut cont la modelul de date): pipeline-ul comercial, P&L, marje, overhead-uri detaliate. Modelul de date le include ca referință.
+Ce **nu** intră în prima versiune (doar de ținut cont la modelul de date): acoperirea costului până la clarificarea formulei, pipeline-ul comercial, P&L, marje și overhead-uri detaliate. Modelul de date le include ca referință unde este necesar.
 
 ---
 
@@ -40,7 +40,7 @@ Aplicația e organizată în trei zone, fiecare pentru un rol, cu permisiuni dif
 
 | View | Rol principal | Ce face | Sursa datelor | Detaliu în |
 |---|---|---|---|---|
-| **1. Management** | Management / owner | Overview: **Utilizare echipă** (Est. vs Real. ca % din capacitate) + acoperirea costului. Cine e supra/sub-încărcat, la nivel de firmă, pe orizontul de luni. | Alocări (plan) + ore ClickUp + concedii | §5 (tab Utilizare) + §4 |
+| **1. Management** | Management / owner | Overview: **Utilizare echipă** (Est. vs Real. ca % din capacitatea disponibilă). Cine e supra/sub-încărcat, la nivel de firmă, pe orizontul de luni. | Alocări (plan) + ore ClickUp + ajustări + concedii | §5 (tab Utilizare) + §4 |
 | **2. PM** | Project Manager | Board **săptămânal per proiect**: ce s-a lucrat (plan vs realizat pe task), ce urmează, cine a lucrat, iar pentru proiecte cu livrabile — Gantt pe module. Un board per proiect. | ClickUp (taskuri, ore logate, estimări, status, deadline) | §6 (nou) |
 | **3. Team Lead** | Team Lead | **Alocarea oamenilor** pe proiecte pe lună (Plan în ore ↔ % normă) și comparația **Plan vs Realizat**. Decide cine, cât, pe ce proiect. | Alocări (manual) + ore ClickUp | §5 (tab-urile Plan, Realizat, Plan vs Realizat) |
 
@@ -48,6 +48,12 @@ Note:
 - View-urile **Management** și **Team Lead** lucrează la **granularitate lunară** (planificare de capacitate). View-ul **PM** lucrează la **granularitate săptămânală și pe task** (execuție).
 - Legătura între ele: orele din ClickUp (nivel task, la PM) se agregă la nivel de persoană × proiect × lună și alimentează „Realizat" în Team Lead și „Real." în Management.
 - Un utilizator poate avea mai multe roluri; view-urile sunt tab-uri de nivel superior, filtrate de permisiuni.
+- Rolurile implicite sunt **Admin**, **Management**, **Team Lead** și **PM**, implementate cu `spatie/laravel-permission`. Permisiunile sunt configurabile de Admin și sunt cele care decid efectiv ce poate vedea sau edita un utilizator.
+- **Admin** are implicit acces complet și poate administra rolurile și permisiunile.
+- **Management** are implicit vizualizare globală și poate crea ajustări auditate pentru realizat.
+- **Team Lead** poate edita implicit planul echipei sale și vede realizatul read-only.
+- **PM** vede implicit proiectele alocate, poate edita planificarea săptămânală salvată în aplicație și vede realizatul read-only.
+- Aceste valori implicite pot fi schimbate ulterior de Admin prin administrarea permisiunilor.
 
 ---
 
@@ -58,9 +64,9 @@ Note:
 | **Normă (fteHoursMonth)** | Orele standard pe lună ale unei persoane (ex. 138h). Poate diferi de la persoană la persoană. |
 | **Plan / Alocare** | Ore planificate pe o persoană × proiect × lună. Se introduc în ore, se afișează și ca % din normă. |
 | **Realizat (actual hours)** | Ore efectiv raportate în time reporting pe persoană × proiect × lună. |
-| **Est. (estimat)** | Încărcarea planificată a persoanei într-o lună = suma alocărilor ei, exprimată ca % din normă. |
-| **Real.** | Încărcarea realizată = orele raportate raportate la normă (% din normă). |
-| **Utilizare** | % din normă (fie estimat, fie realizat). |
+| **Est. (estimat)** | Încărcarea planificată a persoanei într-o lună = suma orelor alocate, exprimată ca % din capacitatea disponibilă. |
+| **Real.** | Încărcarea realizată = ore ClickUp plus ajustări, raportate la capacitatea disponibilă. |
+| **Utilizare** | % din capacitatea disponibilă după concediu (fie estimat, fie realizat). |
 | **Activitate internă** | Muncă în afara proiectelor din pipeline (ex. „[BEE CODED] Non-Project Tasks", „BriefCore"). Intră în utilizare, dar nu în costul proiectelor. |
 | **Extern** | Persoană care apare în time reporting dar nu e în lista de echipă (colaborator ocazional). |
 | **Concediu / TimeOff** | Zile de absență (odihnă, medical, neplătit) trase din ClickUp; reduc capacitatea disponibilă a lunii. |
@@ -97,14 +103,22 @@ Structura de mai jos reflectă `capacity_data.json` din prototip. Trebuie normal
 - `person` (→ Person.name)
 - `projectId` (→ Project.id)
 - `role`
-- `pct`: map `lună → fracție zecimală din normă` (ex. `0.15` = 15% din normă). **Aici se stochează planul.**
-  - Ore planificate pe lună = `pct[lună] × Person.fteHoursMonth`.
+- `hours`: map `lună → ore planificate`. **Aceasta este valoarea canonică stocată pentru plan.**
+- Procentul de plan afișat se calculează ca `hours ÷ Person.fteHoursMonth`; nu este sursa de persistență a planului. Procentul de utilizare se calculează separat, față de capacitatea disponibilă după concediu (§4.2 și §4.4).
 
 **ActualHours (realizat / time reporting)** — o linie per persoană × proiect
 - `person`
 - `projectId` (poate fi `null` pentru activități interne / proiecte din afara pipeline-ului)
 - `project`: etichetă text (folosită când `projectId` e null, ex. „[BEE CODED] Non-Project Tasks")
 - `hours`: map `lună → ore lucrate`
+- Sursa este sincronizarea ClickUp; valorile importate nu sunt suprascrise prin editări manuale.
+
+**ActualAdjustment (ajustare realizat)** — o corecție separată, auditabilă
+- `person`, `projectId` sau etichetă internă, `month`
+- `hoursDelta`: număr de ore pozitiv sau negativ adăugat peste realizatul sincronizat
+- `reason`: motiv obligatoriu
+- `createdBy`, `createdAt` și, dacă se permite modificarea, istoricul autorului și momentului fiecărei schimbări
+- `realTotal` afișat = ore ClickUp sincronizate + suma ajustărilor aplicabile
 
 **TimeOff (concediu / absență)** — o linie per persoană × perioadă
 - `person`
@@ -122,7 +136,12 @@ Structura de mai jos reflectă `capacity_data.json` din prototip. Trebuie normal
 - `deadline` / `dueDate`
 - `timeLogged`: ore logate, cu detaliu **per persoană și per săptămână** (din time entries) — se agregă pentru board și, la nivel lună, alimentează `ActualHours`
 - pentru Gantt: `module`/`section`, `start`, `end`, `progress` (%)
-- Sursa: **ClickUp** (§9.2). În general read-only în app; excepție: ore estimate / planificare cu write-back (§6.4).
+- Sursa: **ClickUp** (§9.2), read-only în aplicație în scope-ul curent.
+
+**WeeklyPlanning (planificare săptămânală PM)** — date deținute de aplicație
+- `projectId`, `weekStart`, `taskClickupId`, `person`, `plannedHours`, `selected`
+- Se salvează în baza de date a aplicației și nu face write-back în ClickUp în scope-ul curent.
+- Păstrează autorul și momentele creării/modificării pentru audit operațional.
 
 **(Referință, nu se editează în acest modul):** `contracts`, `mustRoles`, `overheads`. De păstrat în schemă pentru compatibilitate, dar fără UI aici. (Notă: `contracts.vacation` conține doar tipul politicii de concediu — „Not paid" / „Included in rate" / nr. zile contractuale — NU zilele efectiv luate; zilele efective vin din ClickUp.)
 
@@ -132,28 +151,31 @@ Structura de mai jos reflectă `capacity_data.json` din prototip. Trebuie normal
 - `boardVisible` = bool — dacă proiectul apare ca tab în view-ul PM.
 
 ### 3.2 Reguli de integritate
-- Planul se introduce în **ore**, dar se persistă ca **fracție din normă** (`pct = ore ÷ normă`). Motiv: dacă se schimbă norma persoanei, planul rămâne coerent ca procent. (Prototipul face conversia ore→% la salvare.)
+- Planul se introduce și se persistă canonic în **ore**. Procentele sunt calculate la citire pentru afișare; schimbarea normei sau a concediului nu modifică retroactiv orele planificate.
 - O persoană poate avea mai multe alocări pe același proiect (roluri diferite) — se însumează per lună.
 - `actualHours` cu `projectId = null` = activitate internă; intră în utilizare, dar nu se atribuie unui proiect.
 - Persoanele din `actualHours` care nu există în `people` = **externi**; se afișează separat, fără normă.
+- Time entries și agregatele sincronizate din ClickUp rămân nemodificate. Orice corecție manuală se salvează ca `ActualAdjustment`, cu motiv, autor și audit.
 
 ---
 
-## 4. Reguli de calcul (critic — copiate exact din prototip)
+## 4. Reguli de calcul (critic — definite de această specificație)
 
 ### 4.1 Conversii de bază
-- `oreAlocate(alocare, lună) = alocare.pct[lună] × persoană.fteHoursMonth`
+- `oreAlocate(alocare, lună) = alocare.hours[lună]`
 - `planTotal(persoană, proiect, lună) = Σ oreAlocate` peste toate alocările acelei perechi
-- `realTotal(persoană, proiect, lună) = Σ actualHours.hours[lună]` peste toate liniile acelei perechi
+- `realClickUpTotal(persoană, proiect, lună) = Σ actualHours.hours[lună]` peste toate liniile sincronizate ale acelei perechi
+- `realTotal(persoană, proiect, lună) = realClickUpTotal + Σ ActualAdjustment.hoursDelta`
 
 ### 4.2 Utilizare (view „Utilizare echipă")
 Pentru fiecare persoană × lună:
-- `Est% = (Σ pct[lună] peste alocările persoanei) × 100`
-- `oreEst = Est% / 100 × normă`
-- `Real% = (Σ actualHours[lună] ale persoanei, toate liniile inclusiv interne) ÷ normă × 100`
-- `oreReal = Σ actualHours[lună]`
-- Media pe orizont: `Est_medie = medie(Est% pe toate lunile)`; `Real_medie = medie(Real% doar peste lunile care au time reporting)`.
-- Dacă o lună **nu are** deloc time reporting → se afișează `—` la Real. (nu `0%`).
+- `oreEst = Σ allocation.hours[lună]` peste alocările persoanei
+- `oreReal = Σ realTotal` ale persoanei, toate liniile inclusiv interne
+- `Est% = oreEst ÷ capacitateDisponibilă × 100`
+- `Real% = oreReal ÷ capacitateDisponibilă × 100`
+- Media pe orizont: `Est_medie = medie(Est% pe toate lunile)`; `Real_medie = medie(Real% doar peste lunile care au time reporting sau ajustări)`.
+- Dacă o lună **nu are** deloc time reporting și nici ajustări → se afișează `—` la Real. (nu `0%`).
+- Dacă `capacitateDisponibilă = 0` (concediu toată luna), utilizarea nu se calculează și se afișează „concediu".
 
 **Praguri de culoare pentru utilizare (badge):**
 | Interval | Stare | Culoare |
@@ -174,8 +196,6 @@ La coloana de medie, `> 105%` se marchează roșu.
   - dacă `capacitateDisponibilă = 0` (concediu toată luna) → utilizarea nu se calculează, se afișează „concediu".
 - Concediul se afișează separat ca indicator (ore/zile) pe lună, ca să fie vizibil de ce a scăzut capacitatea.
 
-> **Decizie de confirmat cu clientul:** utilizarea se raportează la **capacitatea disponibilă** (recomandat, ține cont de concediu) sau la **norma brută** (ca în prototipul actual, unde concediul nu era luat în calcul)? Recomandarea mea: capacitate disponibilă, cu norma brută afișată ca referință.
-
 ### 4.3 Abatere plan vs realizat (view „Plan vs Realizat")
 Pentru fiecare pereche persoană × proiect × lună, cu `p = plan (ore)` și `r = realizat (ore)`:
 - Dacă `p > 0`:
@@ -191,28 +211,31 @@ Aceleași praguri se aplică și la sub-totalul per persoană (verde/roșu în f
 
 ## 5. View-urile Team Lead & Management — pas cu pas
 
-Aceste tab-uri acoperă **View 3 (Team Lead)** — pașii 1–3 (alocare la nivel lunar) — și **View 1 (Management)** — pasul 4 (utilizare). Tab-urile 1–3 sunt trei moduri ale aceluiași tabel de alocare (comutator segmentat: „📋 Plan (%)" · „✅ Realizat (ore)" · „⇄ Plan vs Realizat"). Tab-ul 4 (Utilizare) e separat și e ecranul principal al managementului.
+Aceste tab-uri acoperă **View 3 (Team Lead)** — pașii 1–3 (alocare la nivel lunar) — și **View 1 (Management)** — pasul 4 (utilizare). Tab-urile 1–3 sunt trei moduri ale aceluiași tabel de alocare (comutator segmentat: „📋 Plan (ore)" · „✅ Realizat (ore)" · „⇄ Plan vs Realizat"). Tab-ul 4 (Utilizare) e separat și e ecranul principal al managementului.
 
 ### Pas 1 — Tab „Plan (ore)" (editare plan) · rol: Team Lead
 - Tabel: linii = persoană × proiect; coloane = câte una pe lună (din `settings.months`).
-- Fiecare celulă e un **input numeric în ore** (step 0.25, min 0). La salvare se convertește în `pct` (÷ normă).
-- Tooltip pe celulă: echivalentul în % din normă.
+- Fiecare celulă e un **input numeric în ore** (step 0.25, min 0), iar valoarea în ore se persistă direct.
+- Tooltip pe celulă: echivalentul calculat în % din norma lunară; utilizarea față de capacitatea disponibilă se afișează separat în view-ul Management.
 - Header de coloane: eticheta lunii (ex. „Mai '26").
 - **Rând de filtre** sub header: filtru pe persoană, pe proiect, pe rol. Afișează „X din Y rânduri" + buton „Resetează filtrele".
 - Sub-total per persoană + total general pe fiecare lună.
 - Text ajutător (hint) sub titlu care explică unitatea (ore) și conversia.
 
-### Pas 2 — Tab „Realizat (ore)" (editare realizat)
-- Același format ca planul, dar valorile sunt **ore lucrate** (din time reporting), editabile.
+### Pas 2 — Tab „Realizat (ore)" (vizualizare și ajustări după permisiune)
+- Același format ca planul, dar valorile de bază sunt **ore lucrate** sincronizate din ClickUp și sunt read-only.
+- Utilizatorii cu permisiunea de ajustare pot adăuga o corecție pozitivă sau negativă, cu motiv obligatoriu. Ajustarea se salvează separat, cu autor și audit; nu modifică datele ClickUp.
+- Implicit, Admin și Management au această permisiune, iar Team Lead și PM au acces read-only.
 - Sub-totalul fiecărei persoane arată **realizat / plan** per lună, colorat cu regula de la §4.3 (verde ±10%, roșu >±25% sau ore neplanificate).
 
 ### Pas 3 — Tab „Plan vs Realizat — în paralel (ore)" (ecranul din primul screenshot)
 - Pentru fiecare lună, **două sub-coloane**: „Plan" și „Real.".
 - „Plan" = **doar citire** (vine din alocări).
-- „Real." = **input editabil**; la modificare scrie în `actualHours` (upsert pe persoană × proiect × lună). Dacă nu există linie de actual, se creează una.
+- „Real." = total calculat din orele ClickUp și ajustările existente. Este read-only pentru utilizatorii fără permisiunea de ajustare.
+- Pentru utilizatorii autorizați, acțiunea „Adaugă ajustare" cere diferența în ore și motivul; creează un `ActualAdjustment`, fără upsert în `actualHours`.
 - Culoare pe valoarea „Real." conform §4.3 (text verde/roșu).
-- Dacă luna nu are deloc time reporting și `r = 0` → se afișează `—`.
-- **Adaugă pereche**: sus-dreapta, două dropdown-uri (persoană + proiect) și buton „＋ Adaugă pereche". Permite adăugarea unei perechi persoană × proiect care nu are încă ore logate. Opțiune specială în dropdown-ul de proiect: „(intern / alt proiect)" → cere un nume liber (ex. „[BEE CODED] Non-Project Tasks"), care devine o linie de actual cu `projectId = null`.
+- Dacă luna nu are deloc time reporting, nu are ajustări și `r = 0` → se afișează `—`.
+- **Adaugă pereche**: disponibil utilizatorilor cu permisiunea de ajustare, sus-dreapta, cu două dropdown-uri (persoană + proiect) și buton „＋ Adaugă pereche". Permite crearea unei ajustări pentru o pereche fără ore logate. Opțiunea „(intern / alt proiect)" cere o etichetă liberă (ex. „[BEE CODED] Non-Project Tasks") și creează ajustarea cu `projectId = null`.
 - Perechile care sunt activități interne / în afara pipeline-ului se marchează cu un badge „≠" (nu există în pipeline).
 - Persoanele externe (nu sunt în echipă) primesc badge „extern".
 - Sub-total per persoană (Plan total / Real. total pe lună) + total general.
@@ -250,6 +273,7 @@ Aceste tab-uri acoperă **View 3 (Team Lead)** — pașii 1–3 (alocare la nive
 - Comutator **perioadă**: „Săptămână" / „Lună" (stil MiM). La stilul săptămânal (La Depozit) perioada e fixă pe săptămâna curentă.
 - Navigare înainte/înapoi între săptămâni/luni (◀ ▶) cu etichetă de interval (ex. „29 iun – 5 iul 2026").
 - Comutator **mod**: „👁 Prezentare" (read-only, pentru ședințe cu clientul) / „✎ Editare".
+- Modul Editare afectează planificarea săptămânală deținută de aplicație; câmpurile sincronizate din ClickUp rămân read-only.
 - Buton **🔄 Refresh ClickUp** + text „ultima sincronizare" (snapshot/dată).
 - **Săptămâna** = luni–duminică. Datele se agregă pe săptămâni; luna = suma săptămânilor din lună.
 
@@ -263,7 +287,7 @@ Board-ul are secțiuni sub formă de tab-uri/panouri. Setul complet (nu toate ap
    - Coloane: `Status` (badge colorat), `Task` (link ↗ către ClickUp), `Cine` (persoane + ore per persoană), `Ore planificate` (estimarea), `Ore realizate` (logat), `Progres total` (% = logat ÷ estimare).
    - Regulă culoare: dacă realizat > 110% din plan/estimare → **roșu** (depășire); progres >100% → roșu, altfel neutru/verde.
    - Total pe secțiune (plan vs realizat).
-   - În modul Editare: orele plan/realizat sunt inputuri numerice (step 0.25); modificările se propagă (și, în varianta conectată, se scriu în ClickUp — vezi §6.4).
+   - Orele estimate și realizate venite din ClickUp sunt read-only în scope-ul curent.
 
 2. **② În progres (WIP) / Ce urmează** — taskurile active + de făcut:
    - Coloane: `Plan` (checkbox „lucrez săptămâna viitoare"), `Task` (link ClickUp), `Owner`, `Logat`, `Rămas` (estimare − logat), `Deadline`, `Progres` (% badge).
@@ -275,6 +299,7 @@ Board-ul are secțiuni sub formă de tab-uri/panouri. Setul complet (nu toate ap
    - Pentru fiecare task bifat în „În progres", aloci ore pe persoană (`resursă: ore`).
    - Se afișează un **pool de resurse** cu capacitatea săptămânală a fiecăruia (din `resInfo`: nume, rol, ore/săptămână) și cât e deja alocat → cine mai are loc.
    - Total pe task și total pe resursă.
+   - Selecțiile și orele alocate se persistă în `WeeklyPlanning`, în baza de date a aplicației.
 
 4. **📅 Gantt (doar proiecte cu livrabile)** — grilă module × săptămâni:
    - Rânduri grupate pe **module/secțiuni** (ex. „CRM – Unified inbox"), fiecare task cu `owner`, `estimare`, `progres`, `status`, `start`, `end`, etichetă (T1, T2…).
@@ -286,7 +311,8 @@ Board-ul are secțiuni sub formă de tab-uri/panouri. Setul complet (nu toate ap
 ### 6.4 Sursa datelor și editare (ClickUp)
 - Totul se trage din **ClickUp**, la nivel de **task**: nume, `id` (pentru link `https://app.clickup.com/t/{id}`), status, asignați, **ore logate** (time tracking), **ore estimate** (câmpul „Ore estimate"/„Time estimate"), deadline/due date, iar pentru Gantt: start/end și modulul (din nume/listă/tag).
 - Agregarea pe săptămână se face după data time entry-ului; pe task se însumează orele per persoană.
-- **Editare bidirecțională (obiectiv):** orele estimate și planificarea săptămânii viitoare, editate în board, se scriu înapoi în ClickUp (în varianta conectată). În prototip editarea e doar locală. De confirmat scope-ul write-back cu clientul.
+- Datele sincronizate din ClickUp sunt **read-only**. Planificarea săptămânii viitoare este o suprapunere internă, salvată în aplicație și asociată taskurilor prin ID-ul ClickUp.
+- Write-back-ul în ClickUp este în afara scope-ului curent și poate fi evaluat într-o fază ulterioară.
 - Aceste ore logate (task-level) sunt **aceeași sursă** care, agregată la persoană × proiect × lună, alimentează „Realizat" din View-urile Team Lead și Management (§9.2).
 
 ### 6.5 Template configurabil (T&M vs Livrabile)
@@ -310,10 +336,10 @@ Aspectul general: tabele curate, dense, „spreadsheet-like", pe fundal alb, cu 
   - roșu (`b-bad`) = peste 105%
   - gri (`b-mut`) = 0% / neutru / „extern" / „≠"
   - lângă badge, orele în text mic gri (11px), ex. „83h".
-- **Valori plan vs realizat**: planul e text gri (read-only); realizatul e input numeric care devine **verde** (în plan) sau **roșu** (abatere/neplanificat) după regula §4.3. `·` = fără valoare, `—` = fără time reporting pe luna respectivă.
+- **Valori plan vs realizat**: planul și totalul realizat sunt afișate ca valori; realizatul devine **verde** (în plan) sau **roșu** (abatere/neplanificat) după regula §4.3. Pentru utilizatorii autorizați există o acțiune separată de ajustare, nu editare inline a orelor ClickUp. `·` = fără valoare, `—` = fără time reporting pe luna respectivă.
 - **Rândul de filtre**: fundal ușor diferit, dropdown-uri native, contor „X din Y" și buton de reset.
 - **Sub-totaluri**: rând cu fundal gri foarte deschis (`#f8f9fb`), text „TOTAL {Persoană}".
-- **Comutator de mod** (segmented control) pentru tab-urile 1–3: „📋 Plan (%)" · „✅ Realizat (ore)" · „⇄ Plan vs Realizat".
+- **Comutator de mod** (segmented control) pentru tab-urile 1–3: „📋 Plan (ore)" · „✅ Realizat (ore)" · „⇄ Plan vs Realizat".
 - **Diacritice**: UI complet în română, cu diacritice corecte (ă, â, î, ș, ț). Sortări cu `localeCompare('ro')`.
 
 Paleta de referință (din prototip): fundal alb, text închis, `--line` gri deschis, verde = ok/sub-încărcat, galben = la limită, roșu = supra-încărcat/abatere, gri = neutru. Se poate rafina, dar semnificația culorilor trebuie păstrată identică.
@@ -324,19 +350,21 @@ Paleta de referință (din prototip): fundal alb, text închis, `--line` gri des
 - Badge-uri de status task: done/qa/ready (verde), in progress/active (albastru), to do/blocked/backlog (gri).
 - Butonul „🔄 Refresh ClickUp" în **mov ClickUp** (`#7b68ee`); taskurile sunt linkuri cu săgeată „↗".
 - Gantt: celule colorate pe săptămâni (albastru = în progres, verde = done, portocaliu = pending, gri = to do), linie roșie pe săptămâna curentă.
-- Modul „Prezentare" ascunde bordurile de input (aspect curat pentru ședințe cu clientul); „Editare" le afișează.
+- Modul „Prezentare" ascunde controalele planificării interne (aspect curat pentru ședințe cu clientul); „Editare" le afișează. Datele sincronizate din ClickUp rămân read-only în ambele moduri.
 
 ---
 
 ## 8. Backend & API
 
-Aplicație cu backend și bază de date (stack la alegerea programatorului). Cerințe minime de API (REST sau echivalent):
+Aplicația folosește **PostgreSQL** în dezvoltarea locală, staging și producție. **SQLite** este permis exclusiv pentru testele automate. Cerințe minime de API (REST sau echivalent):
 
 - `GET /settings`, `PUT /settings` — luni active, norme implicite, weeksPerMonth.
 - `GET /people`, `POST/PUT/DELETE /people/:id` — echipă, roluri, normă.
 - `GET /projects`, `POST/PUT/DELETE /projects/:id`.
-- `GET /allocations`, `PUT /allocations` — upsert pe (persoană, proiect, rol, lună); valoarea primită în **ore**, convertită în `pct` la scriere.
-- `GET /actual-hours`, `PUT /actual-hours` — upsert pe (persoană, proiect|etichetă, lună) în **ore**. Suport pentru `projectId = null` (intern).
+- `GET /allocations`, `PUT /allocations` — upsert pe (persoană, proiect, rol, lună); valoarea canonică primită și stocată este în **ore**.
+- `GET /actual-hours` — citește orele sincronizate din ClickUp și totalurile care includ ajustările; datele ClickUp nu au endpoint de editare manuală.
+- `POST /actual-adjustments`, `PUT/DELETE /actual-adjustments/:id` — creează sau administrează ajustări separate, numai cu permisiunea necesară; motivul și auditul sunt obligatorii. Suport pentru `projectId = null` (intern).
+- `GET /weekly-planning`, `PUT /weekly-planning` — citește și persistă selecțiile și orele planificării săptămânale PM în aplicație.
 - Endpoint-uri de agregare pentru view-uri (opțional; calculul se poate face și pe frontend, dar recomandat pe backend pentru consistență):
   - utilizare per persoană × lună (Est%, Real%, ore) — View Management;
   - plan vs realizat per persoană × proiect × lună — View Team Lead;
@@ -345,17 +373,19 @@ Aplicație cu backend și bază de date (stack la alegerea programatorului). Cer
 - **Integrare ClickUp** (§9):
   - `POST /sync/clickup` — declanșează sincronizarea (membri → persoane, foldere/liste → proiecte, time entries → actualHours + taskuri board PM, listă concedii → timeOff). Idempotent.
   - job programat pentru sync automat (nightly / la câteva ore) + `GET /sync/status` cu timestamp „ultima sincronizare".
-  - (obiectiv) write-back în ClickUp pentru ore estimate / planificare — vezi §6.4.
+  - integrarea este read-only; write-back-ul în ClickUp nu intră în scope-ul curent.
   - stocare securizată a credențialelor ClickUp (token/OAuth), nu în cod.
 - `GET /time-off`, `PUT /time-off` — concedii (corectare manuală peste ce vine din sync).
 
 **Reguli de scriere importante:**
-- Editarea „Real." din tab-ul Plan vs Realizat face **upsert** în `actualHours`. Dacă există mai multe linii pentru aceeași pereche, se scrie diferența pe prima linie (comportamentul din prototip: `list[0] = valoare_nouă - suma_celorlalte`).
-- Toate scrierile persistă imediat în DB (prototipul salvează la fiecare `onchange`).
+- Orele din `actualHours` sunt scrise numai de sincronizarea ClickUp. Corecțiile utilizatorilor creează `ActualAdjustment` și nu suprascriu sursa.
+- Fiecare ajustare are motiv, autor și istoric auditabil. Implicit, Admin și Management pot crea ajustări; Team Lead și PM au acces read-only la realizat.
+- Planificarea săptămânală PM se persistă imediat în baza de date a aplicației.
 
 **Nefuncționale:**
-- Autentificare + roluri (cel puțin: admin care editează, viewer care doar vizualizează). Prototipul e single-user; aplicația nouă e multi-user.
-- Istoric/audit al modificărilor (dezirabil, mai ales pentru actual hours).
+- Autentificare + roluri și permisiuni cu `spatie/laravel-permission`. Rolurile implicite sunt Admin, Management, Team Lead și PM; Admin poate gestiona permisiunile din aplicație.
+- Autorizarea se verifică pe permisiuni, nu doar pe numele rolului.
+- Istoric/audit obligatoriu pentru ajustările realizatului și modificările importante.
 - Diacritice / UTF-8 peste tot (DB, API, UI).
 - Performanță: tabele de ~20 persoane × ~35 proiecte × 8+ luni; trebuie să fie fluide (sticky headers, fără reflow greoi).
 
@@ -376,7 +406,8 @@ Datele au **surse diferite** în funcție de tip. Acesta e un punct central al p
 - Orele pe task-uri care **nu** aparțin unui folder de proiect din pipeline (ex. task-uri interne, „Non-Project", „BriefCore") → `actualHours` cu `projectId = null` și etichetă text (activitate internă). Intră în utilizare, nu în costul proiectelor.
 - Persoanele care au time entries dar nu sunt membri sincronizați = **externi** (afișați separat, fără normă).
 - **Cadență de sync**: recomandat un job periodic (ex. la câteva ore / nightly) + buton „Sincronizează acum". De păstrat un timestamp „ultima sincronizare".
-- **Atenție la editarea manuală**: tab-ul „Plan vs Realizat" permite editarea „Real." direct în app. Trebuie definit clar cine câștigă la conflict cu sync-ul din ClickUp (recomandat: ClickUp = sursa de adevăr pentru realizat; editarea manuală rămâne doar pentru perioade fără time reporting sau se marchează ca „override" ce nu e suprascris de sync). **De confirmat cu clientul.**
+- ClickUp rămâne sursa de adevăr pentru orele pontate. Ajustările manuale sunt înregistrări separate, însumate la afișare, și nu sunt suprascrise de sincronizare.
+- Crearea ajustărilor depinde de permisiune: implicit Admin și Management pot crea ajustări, iar Team Lead și PM văd realizatul read-only.
 
 ### 9.2b Concediile — din ClickUp (API, automat)
 - Zilele de concediu/absență se trag din ClickUp și populează entitatea `TimeOff` (§3.1).
@@ -388,12 +419,12 @@ Datele au **surse diferite** în funcție de tip. Acesta e un punct central al p
 - Dev-ul are nevoie să știe **ID-ul listei/space-ului de concedii** din ClickUp și cum e marcat tipul de concediu.
 
 ### 9.3 Planul (alocările) — manual în app
-- Planul de alocare (`allocations.pct`) se introduce și se editează **manual** în aplicație (tab-ul „Plan (ore)"). Nu are sursă externă — e o decizie de planificare.
+- Planul de alocare (`allocations.hours`) se introduce și se editează **manual** în aplicație (tab-ul „Plan (ore)"). Orele sunt valoarea canonică; procentul este calculat. Planul nu are sursă externă — este o decizie de planificare.
 - Norma persoanei se editează manual.
 
 ### 9.4 Import inițial (one-off)
 Pentru bootstrap, datele existente vin din `Capacity alocation - pana in Dec 2026.xlsx` și `capacity_data.json`:
-- **Sheet „Alocări"**: `Client | Proiect | Persoană | Rol | <ore pe fiecare lună>` → alocări (orele → `pct` ÷ normă).
+- **Sheet „Alocări"**: `Client | Proiect | Persoană | Rol | <ore pe fiecare lună>` → alocări stocate direct în ore.
 - **Sheet „Pe persoană"**: `Persoană | Normă (h/lună) | <ore pe lună>` = totaluri de control pentru validarea importului.
 - `capacity_data.json` conține deja structura completă → cel mai simplu punct de plecare.
 
@@ -405,7 +436,7 @@ Livrează un script de import care populează DB-ul din JSON, apoi se comută pe
 
 ## 10. Setări (administrare)
 
-Zonă separată de configurare, accesibilă rolurilor de admin/management. Conține:
+Zonă separată de configurare, accesibilă pe baza permisiunilor. Valorile implicite oferă acces Admin și, pentru configurările operaționale, Management. Conține:
 
 ### 10.1 Proiecte ↔ board & PM
 - Lista de proiecte vine din **ClickUp** (§9.1). Pentru fiecare proiect se configurează:
@@ -421,34 +452,37 @@ Zonă separată de configurare, accesibilă rolurilor de admin/management. Conț
 ### 10.3 General
 - Orizontul de luni (`settings.months`), `defaultFteHoursMonth`, `hoursPerLeaveDay`, `weeksPerMonth`.
 - Configurarea sincronizării ClickUp: ID-uri de workspace/space, **lista de concedii** (§9.2b), cadența de sync, credențiale.
-- Utilizatori și roluri (Management / PM / Team Lead / admin).
+- Utilizatori, roluri și permisiuni prin `spatie/laravel-permission`.
+- Roluri implicite: Admin, Management, Team Lead și PM. Administrarea permisiunilor este disponibilă implicit numai rolului Admin.
 
 ---
 
 ## 11. Livrabile și etape sugerate
 
-1. **Schemă DB + import** — modelul din §3, script de import din JSON, validare cu Excel.
-2. **API CRUD** — people, projects, allocations, actualHours, timeOff, settings (§8).
+1. **Schemă DB PostgreSQL + import** — modelul din §3, script de import din JSON, validare cu Excel; SQLite rămâne exclusiv pentru teste.
+2. **API CRUD** — people, projects, allocations în ore, actualHours read-only, ajustări auditate, planificare săptămânală, timeOff și settings (§8).
 3. **Integrare ClickUp** — sync membri → persoane, foldere/liste → proiecte, time entries → actualHours + taskuri board, listă concedii → timeOff; job programat + sync manual (§9).
-4. **View Team Lead** — tab-urile Plan (ore), Realizat (ore), Plan vs Realizat: conversie ore↔%, filtre, totaluri, culori abatere (§5 pașii 1–3).
+4. **View Team Lead** — tab-urile Plan (ore), Realizat (ore), Plan vs Realizat: plan canonic în ore, procente calculate, filtre, totaluri, culori abatere (§5 pașii 1–3).
 5. **View Management** — tab Utilizare echipă: Est/Real ca % din capacitatea disponibilă (normă − concediu), indicator concediu, badge-uri colorate, externi, filtre (§5 pas 4, §4).
 6. **View PM — board per proiect** — secțiuni Ce am făcut / Ce urmează / Cine a făcut / Rezumat, linkuri ClickUp, moduri Prezentare/Editare, perioadă săptămână/lună (§6, stil MiM).
-7. **View PM — extensie livrabile** — secțiunile În progres (WIP), Planificare resurse, Gantt pe module; template configurabil T&M vs livrabile (§6.3–§6.5, stil La Depozit).
-8. **Zona de Setări** — proiecte ↔ PM + tip board, echipă (normă/tarif/rol), general (luni, sync ClickUp, utilizatori/roluri) (§10).
-9. **Write-back ClickUp** (obiectiv) — ore estimate / planificare săptămână scrise înapoi în ClickUp (§6.4).
-10. **Auth + roluri** (Management / PM / Team Lead) și finisaje vizuale conform §7.
-11. **Verificare**: valorile din aplicație coincid cu cele din prototipurile HTML pentru aceleași date (test de regresie pe câteva persoane/luni/proiecte).
+7. **View PM — extensie livrabile** — secțiunile În progres (WIP), Planificare resurse salvată în aplicație și Gantt pe module; template configurabil T&M vs livrabile (§6.3–§6.5, stil La Depozit).
+8. **Auth + permisiuni** — integrare `spatie/laravel-permission`, rolurile implicite Admin / Management / Team Lead / PM și administrarea permisiunilor de către Admin.
+9. **Zona de Setări** — proiecte ↔ PM + tip board, echipă (normă/tarif/rol), general (luni, sync ClickUp, utilizatori/roluri/permisiuni) (§10).
+10. **Verificare**: calculele respectă această specificație, iar prototipurile HTML sunt folosite pentru regresie vizuală și validarea seturilor de date compatibile.
+
+**Fază ulterioară, în afara scope-ului curent:** write-back ClickUp; acoperirea costului după clarificarea formulei și a sursei datelor.
 
 ---
 
 ## 12. Criterii de acceptare
 
-- Pentru un set de date identic, valorile Est%/Real%/ore și culorile din view-urile Team Lead și Management coincid cu prototipul `Capacity Board.html`.
+- Pentru un set de date de regresie, valorile Est%/Real%/ore respectă formulele din această specificație, inclusiv raportarea la capacitatea disponibilă după concediu; prototipul `Capacity Board.html` este referință vizuală și de date, nu sursa regulilor.
 - Board-ul PM reproduce, pentru un proiect, aceleași ore/taskuri/procente ca prototipurile MiM și La Depozit pentru aceeași perioadă.
-- Fiecare rol (Management / PM / Team Lead) vede și editează doar ce îi e permis.
+- Rolurile implicite Admin, Management, Team Lead și PM văd și editează doar ce le permit capabilitățile configurate; Admin poate administra permisiunile.
 - În view-ul PM apare **câte un tab per proiect** (din ClickUp), iar selectorul de PM filtrează tab-urile la proiectele alocate acelui PM (configurate în Setări).
 - Selectorul „Luni afișate" din Management schimbă numărul de luni vizibile (3 / 6 / Toate).
-- Editarea „Real." în tab-ul comparativ persistă în DB și se reflectă imediat în „Utilizare echipă".
+- O ajustare „Real." creată de un utilizator autorizat persistă separat, cu motiv, autor și audit, și se reflectă imediat în „Utilizare echipă" fără a modifica orele ClickUp.
+- Planificarea săptămânală PM persistă în aplicație și este disponibilă utilizatorilor autorizați după reîncărcare.
 - Taskurile din board-ul PM au link funcțional către ClickUp (`/t/{id}`).
 - Filtrele funcționează și afișează contorul „X din Y".
 - Diacriticele se afișează și se sortează corect (RO).
