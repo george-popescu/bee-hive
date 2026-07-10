@@ -49,7 +49,7 @@ Nivelul de reasoning folosit pentru arhitectură și implementare rămâne **Ext
 
 ### Condiție de finalizare
 
-Nu mai există decizii blocante pentru schema bazei de date sau pentru sursele datelor.
+Nu mai există decizii blocante pentru schema bazei de date. Reconcilierea din M1 a identificat însă două valori contradictorii în workbook-ul inițial; detaliile sunt păstrate în statusul milestone-ului.
 
 ---
 
@@ -77,6 +77,15 @@ Nu mai există decizii blocante pentru schema bazei de date sau pentru sursele d
 ### Condiție de finalizare
 
 Rezultatele calculate coincid cu exemplele confirmate din dashboardurile actuale.
+
+### Status implementare — 10 iulie 2026
+
+- Finalizat: schema PostgreSQL/SQLite, modele și relații, factories, setări implicite și indexul unic pentru numele persoanei.
+- Finalizat: motorul pentru capacitate disponibilă, concedii pe zile lucrătoare, plan, realizat, utilizare, medii și pragurile Plan vs Realizat.
+- Finalizat: ajustări append-only și corectare prin ajustare inversă legată de original.
+- Finalizat: comanda `capacity:import-workbook`, cu dry-run, import idempotent și oprire automată dacă totalurile de control nu coincid.
+- Verificare completă: lint, type-check, Pint, PHPStan și 65 de teste cu 228 de aserțiuni.
+- Decizie de date rămasă: pentru `Calin Stefanescu`, sheet-ul `Alocări` însumează `85h` în iulie 2026 și `0h` în august 2026, iar sheet-ul `Pe persoană` conține valori hardcodate `80h` și `80h`. Până la confirmarea sursei corecte, importul real nu scrie nimic în baza de date.
 
 ---
 
