@@ -117,7 +117,9 @@ Structura de mai jos reflectă `capacity_data.json` din prototip. Trebuie normal
 - `person`, `projectId` sau etichetă internă, `month`
 - `hoursDelta`: număr de ore pozitiv sau negativ adăugat peste realizatul sincronizat
 - `reason`: motiv obligatoriu
-- `createdBy`, `createdAt` și, dacă se permite modificarea, istoricul autorului și momentului fiecărei schimbări
+- `createdBy`, `createdAt`
+- `reversesAdjustmentId` (nullable): referință la ajustarea anulată/corectată
+- Înregistrările sunt **append-only**: nu se editează și nu se șterg. O eroare se corectează printr-o ajustare inversă, legată de înregistrarea originală.
 - `realTotal` afișat = ore ClickUp sincronizate + suma ajustărilor aplicabile
 
 **TimeOff (concediu / absență)** — o linie per persoană × perioadă
@@ -263,7 +265,8 @@ Aceste tab-uri acoperă **View 3 (Team Lead)** — pașii 1–3 (alocare la nive
 **Referință vizuală:** `MiM_Board_PM_Iunie.html` (stil T&M) și `La_Depozit_Board_PM_Saptamanal.html` (stil livrabile/Gantt). Aceleași date ClickUp, un singur template configurabil (vezi §6.5).
 
 ### 6.0 Structură: un tab per proiect + selector de PM
-- **Board-urile vin din proiectele ClickUp**: fiecare proiect (folder/list din ClickUp) generează automat **un tab de board** în view-ul PM. Lista de tab-uri = proiectele active din ClickUp; nu se creează manual.
+- **Board-urile vin din proiectele ClickUp**: fiecare proiect activ descoperit în Space-ul configurat `PROJECTS` generează automat **un tab de board** în view-ul PM. Integrarea este generică și nu conține logică hardcodată pentru un proiect anume.
+- `La Depozit` este proiectul de referință pentru validarea template-ului de tip livrabile/Gantt. Regulile lui specifice sunt date de regresie și configurări inițiale, nu reguli globale aplicate tuturor proiectelor.
 - Sub titlul „📋 PM — Board...", o **bară de tab-uri orizontală**, câte un tab pentru fiecare proiect (ex. „Osiris – La Depozit", „Iancu Guda – MiM", …), cu o mică etichetă de tip (T&M / livrabile). Tab-ul selectat deschide board-ul acelui proiect.
 - **Selector de PM în dreptul titlului** (dropdown, colț dreapta-sus): „Toți PM" + lista de PM. Selectând un PM, se **filtrează tab-urile** la proiectele **alocate acelui PM** (vezi §10 „Setări"). Astfel fiecare PM își vede rapid doar proiectele lui.
 - Asocierea proiect → PM se face în zona de **Setări** (§10), nu se deduce automat.
@@ -363,7 +366,8 @@ Aplicația folosește **PostgreSQL** în dezvoltarea locală, staging și produc
 - `GET /projects`, `POST/PUT/DELETE /projects/:id`.
 - `GET /allocations`, `PUT /allocations` — upsert pe (persoană, proiect, rol, lună); valoarea canonică primită și stocată este în **ore**.
 - `GET /actual-hours` — citește orele sincronizate din ClickUp și totalurile care includ ajustările; datele ClickUp nu au endpoint de editare manuală.
-- `POST /actual-adjustments`, `PUT/DELETE /actual-adjustments/:id` — creează sau administrează ajustări separate, numai cu permisiunea necesară; motivul și auditul sunt obligatorii. Suport pentru `projectId = null` (intern).
+- `POST /actual-adjustments` — creează o ajustare append-only, numai cu permisiunea necesară; motivul și auditul sunt obligatorii. Suport pentru `projectId = null` (intern).
+- `POST /actual-adjustments/:id/reverse` — creează o ajustare inversă legată de cea originală. Nu există endpoint-uri `PUT` sau `DELETE` pentru ajustări.
 - `GET /weekly-planning`, `PUT /weekly-planning` — citește și persistă selecțiile și orele planificării săptămânale PM în aplicație.
 - Endpoint-uri de agregare pentru view-uri (opțional; calculul se poate face și pe frontend, dar recomandat pe backend pentru consistență):
   - utilizare per persoană × lună (Est%, Real%, ore) — View Management;
@@ -379,7 +383,7 @@ Aplicația folosește **PostgreSQL** în dezvoltarea locală, staging și produc
 
 **Reguli de scriere importante:**
 - Orele din `actualHours` sunt scrise numai de sincronizarea ClickUp. Corecțiile utilizatorilor creează `ActualAdjustment` și nu suprascriu sursa.
-- Fiecare ajustare are motiv, autor și istoric auditabil. Implicit, Admin și Management pot crea ajustări; Team Lead și PM au acces read-only la realizat.
+- Fiecare ajustare are motiv și autor și este imuabilă. Anularea/corectarea creează o ajustare inversă cu referință la original, astfel încât auditul rămâne complet. Implicit, Admin și Management pot crea ajustări; Team Lead și PM au acces read-only la realizat.
 - Planificarea săptămânală PM se persistă imediat în baza de date a aplicației.
 
 **Nefuncționale:**

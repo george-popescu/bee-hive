@@ -63,7 +63,7 @@ Nu mai există decizii blocante pentru schema bazei de date sau pentru sursele d
 - Alocări lunare pe persoană × proiect × rol.
 - Time entries ClickUp și agregări pentru orele realizate.
 - Concedii și capacitate disponibilă.
-- Ajustări manuale separate de time entries, cu motiv, autor și audit.
+- Ajustări manuale append-only, separate de time entries, cu motiv, autor și corectare prin ajustare inversă.
 - Asocierea PM ↔ proiect.
 - Setări generale și perioade active.
 - Servicii separate pentru:
@@ -176,7 +176,7 @@ Boardul reproduce comportamentul T&M agreat și valorile ClickUp pentru perioada
 
 ### Condiție de finalizare
 
-Boardul reproduce regulile raportului „La Depozit”, iar selecțiile și alocările sunt persistente și disponibile utilizatorilor autorizați.
+Boardul generic reproduce regulile raportului de referință „La Depozit” atunci când proiectul folosește acel template/configurare, iar selecțiile și alocările sunt persistente și disponibile utilizatorilor autorizați. Alte proiecte pot avea propriile configurări fără logică hardcodată.
 
 ---
 
@@ -213,7 +213,7 @@ Aplicația este pregătită pentru utilizare internă în producție, cu permisi
 
 1. Planul este stocat în **ore**, iar procentul este calculat.
 2. Utilizarea este raportată la **capacitatea disponibilă după concediu**.
-3. Time entries ClickUp nu sunt suprascrise; corecțiile sunt ajustări separate, cu motiv, autor și audit.
+3. Time entries ClickUp nu sunt suprascrise; corecțiile sunt ajustări separate, append-only, cu motiv și autor. Ajustările nu se editează și nu se șterg; o eroare se corectează printr-o ajustare inversă legată de original.
 4. Editarea realizatului depinde de permisiune. Implicit, Admin și Management pot crea ajustări, iar Team Lead și PM au acces read-only la realizat.
 5. Rolurile și permisiunile sunt implementate cu `spatie/laravel-permission`. Implicit: Admin are acces complet și gestionează permisiunile; Management are vizualizare globală și poate crea ajustări; Team Lead editează planul echipei sale; PM vede proiectele alocate și editează planificarea săptămânală. Permisiunile pot fi reconfigurate de Admin.
 6. Write-back în ClickUp este în afara scope-ului curent și poate fi reevaluat într-o fază ulterioară.
@@ -221,7 +221,8 @@ Aplicația este pregătită pentru utilizare internă în producție, cu permisi
 8. Planificarea săptămânală PM este salvată în aplicație.
 9. PostgreSQL este folosit local, în staging și în producție; SQLite este rezervat testelor automate.
 10. Specificația scrisă este sursa regulilor de business; prototipurile rămân referințe vizuale și pentru regresie.
-11. Fiecare milestone se încheie cu teste, verificare vizuală, demo și commit Git.
+11. Integrarea ClickUp și board-urile PM sunt generice pentru toate proiectele active din Space-ul configurat. `La Depozit` este doar proiectul de referință pentru template-ul livrabile/Gantt.
+12. Fiecare milestone se încheie cu teste, verificare vizuală, demo și commit Git.
 
 ## Definition of Done pentru fiecare milestone
 
