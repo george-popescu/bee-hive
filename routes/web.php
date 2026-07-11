@@ -10,6 +10,7 @@ use App\Http\Controllers\Admin\AdminSettingController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\AllocationController;
 use App\Http\Controllers\ClickUpSyncController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ManagementController;
 use App\Http\Controllers\PmBoardController;
 use App\Http\Controllers\TeamLeadController;
@@ -19,7 +20,7 @@ use Illuminate\Support\Facades\Route;
 Route::inertia('/', 'welcome')->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('dashboard', 'dashboard')->name('dashboard');
+    Route::get('dashboard', DashboardController::class)->name('dashboard');
     Route::get('team-lead', [TeamLeadController::class, 'index'])
         ->middleware('can:'.PermissionName::ViewTeamLead->value)
         ->name('team_lead.index');

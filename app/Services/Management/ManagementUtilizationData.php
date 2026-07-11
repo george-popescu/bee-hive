@@ -19,8 +19,12 @@ class ManagementUtilizationData
         private readonly SettingsService $settings,
     ) {}
 
-    /** @return array<string, mixed> */
-    public function build(): array
+    /**
+     * @param  list<int>|null  $personIds
+     * @param  list<int>|null  $projectIds
+     * @return array<string, mixed>
+     */
+    public function build(?array $personIds = null, ?array $projectIds = null): array
     {
         $months = $this->period->months();
         $firstMonth = $months[0];
@@ -36,6 +40,7 @@ class ManagementUtilizationData
                 'is_external',
             ])
             ->where('active', true)
+            ->when($personIds !== null, fn ($query) => $query->whereIn('id', $personIds))
             ->with([
                 'capacities' => fn ($query) => $query
                     ->select(['id', 'person_id', 'month', 'capacity_hours'])
@@ -52,16 +57,19 @@ class ManagementUtilizationData
         $allocations = Allocation::query()
             ->select(['person_id', 'project_id', 'month', 'planned_hours'])
             ->whereIn('person_id', $people->keys())
+            ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds))
             ->whereBetween('month', [$firstMonth, $lastMonth])
             ->get();
         $timeEntries = TimeEntry::query()
             ->select(['person_id', 'project_id', 'started_at', 'duration_seconds'])
             ->whereIn('person_id', $people->keys())
+            ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds))
             ->whereBetween('started_at', [$firstMonth, $lastMonth->endOfMonth()])
             ->get();
         $adjustments = ActualAdjustment::query()
             ->select(['person_id', 'project_id', 'month', 'hours_delta'])
             ->whereIn('person_id', $people->keys())
+            ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds))
             ->whereBetween('month', [$firstMonth, $lastMonth])
             ->get();
         $planned = [];
