@@ -131,6 +131,7 @@ final class TeamLeadPlanData
                 'project_id',
                 'internal_label',
                 'month',
+                'effective_date',
                 'hours_delta',
                 'reason',
                 'created_by_name',
@@ -154,6 +155,7 @@ final class TeamLeadPlanData
                     ? $this->internalLabel($adjustment->internal_label)
                     : $this->projectData($project)['label'],
                 'month' => CarbonImmutable::parse($adjustment->month)->format('Y-m'),
+                'effectiveDate' => CarbonImmutable::parse($adjustment->effective_date)->toDateString(),
                 'hoursDelta' => (float) $adjustment->hours_delta,
                 'reason' => $adjustment->reason,
                 'author' => $adjustment->created_by_name,

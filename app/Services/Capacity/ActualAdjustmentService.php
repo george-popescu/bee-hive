@@ -17,7 +17,7 @@ class ActualAdjustmentService
     public function create(
         Person $person,
         ?Project $project,
-        CarbonInterface $month,
+        CarbonInterface $effectiveDate,
         float $hoursDelta,
         string $reason,
         User $author,
@@ -26,7 +26,7 @@ class ActualAdjustmentService
         return $this->persist(
             person: $person,
             project: $project,
-            month: $month,
+            effectiveDate: $effectiveDate,
             hoursDelta: $hoursDelta,
             reason: $reason,
             author: $author,
@@ -52,7 +52,7 @@ class ActualAdjustmentService
             return $this->persist(
                 person: $original->person,
                 project: $original->project,
-                month: CarbonImmutable::parse($original->month),
+                effectiveDate: CarbonImmutable::parse($original->effective_date),
                 hoursDelta: -((float) $original->hours_delta),
                 reason: $reason,
                 author: $author,
@@ -65,7 +65,7 @@ class ActualAdjustmentService
     private function persist(
         Person $person,
         ?Project $project,
-        CarbonInterface $month,
+        CarbonInterface $effectiveDate,
         float $hoursDelta,
         string $reason,
         User $author,
@@ -87,11 +87,14 @@ class ActualAdjustmentService
             throw new InvalidArgumentException('An internal label is required without a project.');
         }
 
+        $effectiveDate = CarbonImmutable::instance($effectiveDate)->startOfDay();
+
         return ActualAdjustment::query()->create([
             'person_id' => $person->getKey(),
             'project_id' => $project?->getKey(),
             'internal_label' => $project === null ? $internalLabel : null,
-            'month' => CarbonImmutable::instance($month)->startOfMonth()->toDateString(),
+            'month' => $effectiveDate->startOfMonth()->toDateString(),
+            'effective_date' => $effectiveDate->toDateString(),
             'hours_delta' => $hoursDelta,
             'reason' => $reason,
             'created_by' => $author->getKey(),

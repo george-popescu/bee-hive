@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Models\ActualAdjustment;
 use App\Models\Person;
 use App\Models\Project;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -26,6 +27,9 @@ class ActualAdjustmentFactory extends Factory
             'month' => now()
                 ->startOfMonth()
                 ->addMonths(fake()->numberBetween(-6, 6))
+                ->toDateString(),
+            'effective_date' => fn (array $attributes): string => CarbonImmutable::parse($attributes['month'])
+                ->addDays(fake()->numberBetween(0, 27))
                 ->toDateString(),
             'hours_delta' => fake()->randomElement([-8, -4, -2, 2, 4, 8]),
             'reason' => fake()->sentence(),

@@ -30,7 +30,7 @@ function actualAdjustmentPayload(Person $person, ?Project $project): array
         'person_id' => $person->getKey(),
         'project_id' => $project?->getKey(),
         'internal_label' => $project === null ? 'Training' : null,
-        'month' => '2026-07',
+        'effective_date' => '2026-07-18',
         'hours_delta' => 2.5,
         'reason' => 'Corecție verificată',
     ];
@@ -70,13 +70,16 @@ it('creates an audited project adjustment', function () {
 
     $this->actingAs($user)
         ->postJson(route('actual_adjustments.store'), actualAdjustmentPayload($person, $project))
-        ->assertSuccessful();
+        ->assertCreated()
+        ->assertJsonPath('adjustment.effective_date', '2026-07-18')
+        ->assertJsonPath('adjustment.month', '2026-07');
 
     $adjustment = ActualAdjustment::query()->sole();
 
     expect($adjustment->person_id)->toBe($person->id)
         ->and($adjustment->project_id)->toBe($project->id)
         ->and($adjustment->internal_label)->toBeNull()
+        ->and($adjustment->effective_date->toDateString())->toBe('2026-07-18')
         ->and($adjustment->month->toDateString())->toBe('2026-07-01')
         ->and($adjustment->hours_delta)->toBe('2.50')
         ->and($adjustment->reason)->toBe('Corecție verificată')
@@ -118,9 +121,14 @@ it('validates the adjustment value reason period and active resources', function
         ->assertJsonValidationErrors(['reason']);
 
     $this->actingAs($user)
-        ->postJson(route('actual_adjustments.store'), [...$payload, 'month' => '2027-01'])
+        ->postJson(route('actual_adjustments.store'), [...$payload, 'effective_date' => '2027-01-15'])
         ->assertUnprocessable()
-        ->assertJsonValidationErrors(['month']);
+        ->assertJsonValidationErrors(['effective_date']);
+
+    $this->actingAs($user)
+        ->postJson(route('actual_adjustments.store'), [...$payload, 'effective_date' => '18.07.2026'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['effective_date']);
 
     $this->actingAs($user)
         ->postJson(route('actual_adjustments.store'), [
@@ -174,6 +182,8 @@ it('reverses an adjustment through a linked inverse entry only once', function (
     $person = Person::factory()->create();
     $original = ActualAdjustment::factory()->create([
         'person_id' => $person,
+        'month' => '2026-07-01',
+        'effective_date' => '2026-07-19',
         'hours_delta' => 3.5,
         'created_by' => $user,
         'created_by_name' => $user->name,
@@ -201,5 +211,6 @@ it('reverses an adjustment through a linked inverse entry only once', function (
         ->assertConflict();
 
     expect(ActualAdjustment::query()->count())->toBe(2)
+        ->and($reversal->effective_date->toDateString())->toBe('2026-07-19')
         ->and((float) ActualAdjustment::query()->sum('hours_delta'))->toBe(0.0);
 });

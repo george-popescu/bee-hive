@@ -15,6 +15,7 @@ use LogicException;
     'project_id',
     'internal_label',
     'month',
+    'effective_date',
     'hours_delta',
     'reason',
     'created_by',
@@ -74,6 +75,7 @@ class ActualAdjustment extends Model
     {
         return [
             'month' => 'date',
+            'effective_date' => 'date',
             'hours_delta' => 'decimal:2',
         ];
     }

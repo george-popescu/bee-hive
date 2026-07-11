@@ -1,6 +1,7 @@
 import { Head, useForm, useHttp } from '@inertiajs/react';
 import {
     Check,
+    ChevronDown,
     LoaderCircle,
     Plus,
     RotateCcw,
@@ -32,6 +33,15 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -96,6 +106,7 @@ type AdjustmentRecord = {
     person: string;
     project: string;
     month: string;
+    effectiveDate: string;
     hoursDelta: number;
     reason: string;
     author: string;
@@ -130,7 +141,7 @@ type AdjustmentPayload = {
     person_id: number | '';
     project_id: number | null;
     internal_label: string;
-    month: string;
+    effective_date: string;
     hours_delta: number | '';
     reason: string;
 };
@@ -150,6 +161,43 @@ function formatHours(value: number | null): string {
     }
 
     return value.toLocaleString('ro-RO', { maximumFractionDigits: 2 });
+}
+
+function localIsoDate(date: Date): string {
+    return [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0'),
+    ].join('-');
+}
+
+function lastDateOfMonth(month: string): string {
+    const [year, monthNumber] = month.split('-').map(Number);
+    const lastDay = new Date(year, monthNumber, 0).getDate();
+
+    return `${month}-${String(lastDay).padStart(2, '0')}`;
+}
+
+function defaultEffectiveDate(months: Month[]): string {
+    const firstDate = `${months[0]?.key ?? ''}-01`;
+    const lastDate = months.length
+        ? lastDateOfMonth(months[months.length - 1].key)
+        : '';
+    const today = localIsoDate(new Date());
+
+    if (firstDate === '-01' || lastDate === '') {
+        return '';
+    }
+
+    return today < firstDate ? firstDate : today > lastDate ? lastDate : today;
+}
+
+function formatDate(date: string): string {
+    return new Intl.DateTimeFormat('ro-RO', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+    }).format(new Date(`${date}T00:00:00`));
 }
 
 function classifyVariance(
@@ -671,11 +719,15 @@ function AdjustmentDialog({
     const activeProjects = projects.filter(
         (project) => project.active !== false,
     );
+    const minimumDate = months.length ? `${months[0].key}-01` : undefined;
+    const maximumDate = months.length
+        ? lastDateOfMonth(months[months.length - 1].key)
+        : undefined;
     const form = useForm<AdjustmentPayload>({
         person_id: people[0]?.id ?? '',
         project_id: activeProjects[0]?.id ?? null,
         internal_label: '',
-        month: months[0]?.key ?? '',
+        effective_date: defaultEffectiveDate(months),
         hours_delta: '',
         reason: '',
     });
@@ -797,35 +849,36 @@ function AdjustmentDialog({
                             )}
                         </div>
                     )}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
                         <div className="flex flex-col gap-2">
-                            <Label htmlFor="adjustment-month">Lună</Label>
-                            <Select
-                                value={form.data.month}
-                                onValueChange={(value) =>
-                                    form.setData('month', value)
+                            <Label htmlFor="adjustment-date">
+                                Data ajustării
+                            </Label>
+                            <Input
+                                id="adjustment-date"
+                                aria-invalid={Boolean(
+                                    form.errors.effective_date,
+                                )}
+                                max={maximumDate}
+                                min={minimumDate}
+                                onChange={(event) =>
+                                    form.setData(
+                                        'effective_date',
+                                        event.target.value,
+                                    )
                                 }
-                            >
-                                <SelectTrigger id="adjustment-month">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        {months.map((month) => (
-                                            <SelectItem
-                                                key={month.key}
-                                                value={month.key}
-                                            >
-                                                {month.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
+                                type="date"
+                                value={form.data.effective_date}
+                            />
+                            {form.errors.effective_date && (
+                                <p className="text-sm text-destructive">
+                                    {form.errors.effective_date}
+                                </p>
+                            )}
                         </div>
                         <div className="flex flex-col gap-2">
                             <Label htmlFor="adjustment-hours">
-                                Diferență ore
+                                Ore de adăugat / scăzut
                             </Label>
                             <Input
                                 id="adjustment-hours"
@@ -839,7 +892,7 @@ function AdjustmentDialog({
                                             : Number(event.target.value),
                                     )
                                 }
-                                placeholder="ex. 2,5 sau -1"
+                                placeholder="ex. +2,5 sau -1"
                                 step={0.25}
                                 type="number"
                                 value={form.data.hours_delta}
@@ -849,6 +902,10 @@ function AdjustmentDialog({
                                     {form.errors.hours_delta}
                                 </p>
                             )}
+                            <p className="text-xs text-muted-foreground">
+                                Valoare pozitivă pentru adăugare, negativă
+                                pentru scădere.
+                            </p>
                         </div>
                     </div>
                     <div className="flex flex-col gap-2">
@@ -977,17 +1034,11 @@ function ReverseAdjustmentButton({
 
 function AdjustmentHistory({
     adjustments,
-    months,
     canReverse,
 }: {
     adjustments: AdjustmentRecord[];
-    months: Month[];
     canReverse: boolean;
 }) {
-    const monthLabels = new Map(
-        months.map((month) => [month.key, month.label]),
-    );
-
     return (
         <Card className="min-w-0">
             <CardHeader>
@@ -1001,7 +1052,7 @@ function AdjustmentHistory({
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Lună</TableHead>
+                            <TableHead>Data ajustării</TableHead>
                             <TableHead>Persoană</TableHead>
                             <TableHead>Proiect / activitate</TableHead>
                             <TableHead className="text-right">Ore</TableHead>
@@ -1015,8 +1066,7 @@ function AdjustmentHistory({
                         {adjustments.map((adjustment) => (
                             <TableRow key={adjustment.id}>
                                 <TableCell>
-                                    {monthLabels.get(adjustment.month) ??
-                                        adjustment.month}
+                                    {formatDate(adjustment.effectiveDate)}
                                 </TableCell>
                                 <TableCell>{adjustment.person}</TableCell>
                                 <TableCell>{adjustment.project}</TableCell>
@@ -1069,19 +1119,21 @@ export default function TeamLeadPlan({
     permissions,
 }: Props) {
     const [mode, setMode] = useState<DisplayMode>('plan');
-    const [personFilter, setPersonFilter] = useState('all');
+    const [allPeopleSelected, setAllPeopleSelected] = useState(true);
+    const [selectedPersonIds, setSelectedPersonIds] = useState<number[]>(() =>
+        people.map((person) => person.id),
+    );
     const [projectFilter, setProjectFilter] = useState('all');
     const [roleFilter, setRoleFilter] = useState('all');
     const [adjustmentOpen, setAdjustmentOpen] = useState(false);
     const filterByPersonAndProject = useCallback(
         <T extends PlanRow | BoardRow>(row: T) =>
-            (personFilter === 'all' ||
-                String(row.person.id) === personFilter) &&
+            (allPeopleSelected || selectedPersonIds.includes(row.person.id)) &&
             (projectFilter === 'all' ||
                 (projectFilter === 'internal'
                     ? row.project.internal
                     : String(row.project.id) === projectFilter)),
-        [personFilter, projectFilter],
+        [allPeopleSelected, projectFilter, selectedPersonIds],
     );
     const filteredPlanRows = useMemo(
         () =>
@@ -1130,8 +1182,17 @@ export default function TeamLeadPlan({
             ? filteredPlanRows.length
             : filteredComparisonRows.length;
     const totalRows = mode === 'plan' ? planRows.length : comparisonRows.length;
+    const personFilterLabel = allPeopleSelected
+        ? 'Toate persoanele'
+        : selectedPersonIds.length === 0
+          ? 'Nicio persoană'
+          : selectedPersonIds.length === 1
+            ? (people.find((person) => person.id === selectedPersonIds[0])
+                  ?.name ?? '1 persoană')
+            : `${selectedPersonIds.length} persoane`;
     const resetFilters = () => {
-        setPersonFilter('all');
+        setAllPeopleSelected(true);
+        setSelectedPersonIds(people.map((person) => person.id));
         setProjectFilter('all');
         setRoleFilter('all');
     };
@@ -1210,32 +1271,93 @@ export default function TeamLeadPlan({
                                 </CardDescription>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
-                                <Select
-                                    value={personFilter}
-                                    onValueChange={setPersonFilter}
-                                >
-                                    <SelectTrigger
-                                        className="w-48"
-                                        aria-label="Filtru persoană"
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button
+                                            aria-label="Filtru persoane"
+                                            className="w-52 justify-between"
+                                            variant="outline"
+                                        >
+                                            <span className="truncate">
+                                                {personFilterLabel}
+                                            </span>
+                                            <ChevronDown data-icon="inline-end" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                        align="start"
+                                        className="max-h-[var(--radix-dropdown-menu-content-available-height)] w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto"
                                     >
-                                        <SelectValue placeholder="Toate persoanele" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectGroup>
-                                            <SelectItem value="all">
+                                        <DropdownMenuGroup>
+                                            <DropdownMenuLabel>
+                                                Persoane
+                                            </DropdownMenuLabel>
+                                            <DropdownMenuCheckboxItem
+                                                checked={allPeopleSelected}
+                                                onCheckedChange={(checked) => {
+                                                    setAllPeopleSelected(
+                                                        checked === true,
+                                                    );
+
+                                                    if (checked === true) {
+                                                        setSelectedPersonIds(
+                                                            people.map(
+                                                                (person) =>
+                                                                    person.id,
+                                                            ),
+                                                        );
+                                                    }
+                                                }}
+                                                onSelect={(event) =>
+                                                    event.preventDefault()
+                                                }
+                                            >
                                                 Toate persoanele
-                                            </SelectItem>
+                                            </DropdownMenuCheckboxItem>
+                                        </DropdownMenuGroup>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuGroup>
                                             {people.map((person) => (
-                                                <SelectItem
+                                                <DropdownMenuCheckboxItem
                                                     key={person.id}
-                                                    value={String(person.id)}
+                                                    checked={selectedPersonIds.includes(
+                                                        person.id,
+                                                    )}
+                                                    onCheckedChange={(
+                                                        checked,
+                                                    ) => {
+                                                        setAllPeopleSelected(
+                                                            false,
+                                                        );
+                                                        setSelectedPersonIds(
+                                                            checked === true
+                                                                ? Array.from(
+                                                                      new Set([
+                                                                          ...selectedPersonIds,
+                                                                          person.id,
+                                                                      ]),
+                                                                  )
+                                                                : selectedPersonIds.filter(
+                                                                      (
+                                                                          personId,
+                                                                      ) =>
+                                                                          personId !==
+                                                                          person.id,
+                                                                  ),
+                                                        );
+                                                    }}
+                                                    onSelect={(event) =>
+                                                        event.preventDefault()
+                                                    }
                                                 >
-                                                    {person.name}
-                                                </SelectItem>
+                                                    <span className="truncate">
+                                                        {person.name}
+                                                    </span>
+                                                </DropdownMenuCheckboxItem>
                                             ))}
-                                        </SelectGroup>
-                                    </SelectContent>
-                                </Select>
+                                        </DropdownMenuGroup>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                                 <Select
                                     value={projectFilter}
                                     onValueChange={setProjectFilter}
@@ -1331,7 +1453,6 @@ export default function TeamLeadPlan({
                 {adjustments.length > 0 && (
                     <AdjustmentHistory
                         adjustments={adjustments}
-                        months={months}
                         canReverse={permissions.adjustActualHours}
                     />
                 )}

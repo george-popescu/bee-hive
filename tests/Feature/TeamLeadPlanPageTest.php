@@ -134,6 +134,7 @@ it('aggregates ClickUp hours and audited adjustments for comparison including in
         'project_id' => $project,
         'internal_label' => null,
         'month' => '2026-05-01',
+        'effective_date' => '2026-05-21',
         'hours_delta' => 4,
         'created_by' => $user,
         'created_by_name' => $user->name,
@@ -154,6 +155,7 @@ it('aggregates ClickUp hours and audited adjustments for comparison including in
             ->where('comparisonRows.1.months.2026-05.actual', 2)
             ->where('comparisonRows.1.months.2026-05.status', 'unplanned')
             ->has('adjustments', 1)
+            ->where('adjustments.0.effectiveDate', '2026-05-21')
             ->where('adjustments.0.hoursDelta', 4)
             ->where('adjustments.0.isReversed', false)
             ->where('permissions.adjustActualHours', true));

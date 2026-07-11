@@ -30,7 +30,7 @@ class ActualAdjustmentController extends Controller
             project: isset($data['project_id'])
                 ? Project::query()->where('active', true)->findOrFail((int) $data['project_id'])
                 : null,
-            month: CarbonImmutable::createFromFormat('!Y-m', $data['month']),
+            effectiveDate: CarbonImmutable::createFromFormat('!Y-m-d', $data['effective_date']),
             hoursDelta: (float) $data['hours_delta'],
             reason: $data['reason'],
             author: $request->user(),
@@ -43,6 +43,7 @@ class ActualAdjustmentController extends Controller
                     'id' => $adjustment->getKey(),
                     'hours_delta' => (float) $adjustment->hours_delta,
                     'month' => CarbonImmutable::parse($adjustment->month)->format('Y-m'),
+                    'effective_date' => CarbonImmutable::parse($adjustment->effective_date)->toDateString(),
                 ],
             ], 201);
         }

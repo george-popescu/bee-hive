@@ -6,9 +6,11 @@ use App\Enums\PermissionName;
 use App\Models\Person;
 use App\Models\Project;
 use App\Services\TeamLead\TeamLeadPlanData;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreActualAdjustmentRequest extends FormRequest
 {
@@ -39,7 +41,7 @@ class StoreActualAdjustmentRequest extends FormRequest
                 Rule::exists((new Project)->getTable(), 'id')->where('active', true),
             ],
             'internal_label' => ['nullable', 'required_without:project_id', 'string', 'max:120'],
-            'month' => ['required', 'date_format:Y-m', Rule::in(app(TeamLeadPlanData::class)->monthKeys())],
+            'effective_date' => ['required', 'date_format:Y-m-d'],
             'hours_delta' => ['required', 'numeric', 'between:-744,744', 'not_in:0,0.0,0.00'],
             'reason' => ['required', 'string', 'min:3', 'max:1000'],
         ];
@@ -50,8 +52,32 @@ class StoreActualAdjustmentRequest extends FormRequest
     {
         return [
             'internal_label.required_without' => 'Eticheta activității interne este obligatorie.',
-            'month.in' => 'Luna trebuie să fie în perioada activă de planificare.',
+            'effective_date.date_format' => 'Data ajustării trebuie să fie validă.',
             'hours_delta.not_in' => 'Ajustarea trebuie să modifice numărul de ore.',
+        ];
+    }
+
+    /** @return array<callable(Validator): void> */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator): void {
+                if ($validator->errors()->has('effective_date')) {
+                    return;
+                }
+
+                $effectiveDate = CarbonImmutable::createFromFormat(
+                    '!Y-m-d',
+                    $this->string('effective_date')->toString(),
+                );
+
+                if (! in_array($effectiveDate->format('Y-m'), app(TeamLeadPlanData::class)->monthKeys(), true)) {
+                    $validator->errors()->add(
+                        'effective_date',
+                        'Data trebuie să fie în perioada activă de planificare.',
+                    );
+                }
+            },
         ];
     }
 }
