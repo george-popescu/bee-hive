@@ -23,10 +23,13 @@ import {
 } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
+    SelectGroup,
     SelectItem,
+    SelectLabel,
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
@@ -581,35 +584,38 @@ export default function PmBoard({
                     </div>
                 </div>
 
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                    {projects.map((project) => (
-                        <Button
-                            key={project.id}
-                            asChild
-                            variant={
-                                project.id === currentProjectId
-                                    ? 'default'
-                                    : 'outline'
-                            }
-                            className="shrink-0"
+                {projects.length > 0 && (
+                    <div className="grid w-full gap-2 sm:max-w-md">
+                        <Label htmlFor="project-selector">Proiect</Label>
+                        <Select
+                            value={currentProjectId?.toString()}
+                            onValueChange={(value) => navigate(Number(value))}
                         >
-                            <Link
-                                href={boardHref(
-                                    project.id,
-                                    period,
-                                    period.anchor,
-                                    selectedPmId,
-                                )}
-                                preserveScroll
+                            <SelectTrigger
+                                id="project-selector"
+                                className="w-full"
                             >
-                                {project.label}
-                                <Badge variant="secondary">
-                                    {project.templateLabel}
-                                </Badge>
-                            </Link>
-                        </Button>
-                    ))}
-                </div>
+                                <SelectValue placeholder="Alege un proiect" />
+                            </SelectTrigger>
+                            <SelectContent align="start">
+                                <SelectGroup>
+                                    <SelectLabel>
+                                        Proiecte disponibile
+                                    </SelectLabel>
+                                    {projects.map((project) => (
+                                        <SelectItem
+                                            key={project.id}
+                                            value={project.id.toString()}
+                                        >
+                                            {project.label} —{' '}
+                                            {project.templateLabel}
+                                        </SelectItem>
+                                    ))}
+                                </SelectGroup>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
 
                 {selectedProject === null ? (
                     <Card>
