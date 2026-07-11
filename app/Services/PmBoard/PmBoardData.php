@@ -100,6 +100,11 @@ class PmBoardData
                 'workedTasks' => [],
                 'upcomingTasks' => [],
                 'peopleWorked' => [],
+                'summaryCharts' => [
+                    'timeline' => [],
+                    'projects' => [],
+                    'people' => [],
+                ],
                 'planning' => null,
                 'gantt' => null,
                 'kpis' => [
@@ -192,6 +197,13 @@ class PmBoardData
                 ->values();
         }
         $peopleWorked = $this->peopleWorked($periodEntryRows);
+        $summaryCharts = $this->summaryCharts(
+            periodEntries: $periodEntryRows,
+            tasks: $tasks,
+            period: $period,
+            rangeStart: $rangeStart,
+            rangeEnd: $rangeEnd,
+        );
         $isDeliverables = $selectedProject instanceof Project
             && $selectedProject->contract_type === ProjectBoardTemplate::Deliverables;
         $planning = $isDeliverables
@@ -219,6 +231,7 @@ class PmBoardData
             'workedTasks' => $workedTasks->all(),
             'upcomingTasks' => $upcomingTasks->all(),
             'peopleWorked' => $peopleWorked,
+            'summaryCharts' => $summaryCharts,
             'planning' => $planning,
             'gantt' => $gantt,
             'kpis' => [
@@ -316,6 +329,125 @@ class PmBoardData
             ->sortByDesc('hours')
             ->values()
             ->all());
+    }
+
+    /**
+     * @param  EloquentCollection<int, TimeEntry>  $periodEntries
+     * @param  EloquentCollection<int, ClickUpTask>  $tasks
+     * @return array{
+     *     timeline: list<array{key: string, label: string, hours: float, projects: list<array{label: string, hours: float}>}>,
+     *     projects: list<array{label: string, hours: float}>,
+     *     people: list<array{key: string, name: string, hours: float, tasks: int, projects: list<array{label: string, hours: float}>}>
+     * }
+     */
+    private function summaryCharts(
+        EloquentCollection $periodEntries,
+        EloquentCollection $tasks,
+        string $period,
+        CarbonImmutable $rangeStart,
+        CarbonImmutable $rangeEnd,
+    ): array {
+        $projectLabelsByTask = $tasks->mapWithKeys(fn (ClickUpTask $task): array => [
+            $task->getKey() => $task->project instanceof Project
+                ? $this->projectLabel($task->project)
+                : 'Activități interne',
+        ]);
+        $projectRows = $this->chartHoursRows($periodEntries, $projectLabelsByTask);
+        $people = array_values($periodEntries
+            ->groupBy(fn (TimeEntry $entry): string => $this->entryPersonKey($entry))
+            ->map(function (Collection $entries, string $key) use ($projectLabelsByTask): array {
+                $entry = $entries->first();
+
+                return [
+                    'key' => $key,
+                    'name' => $entry instanceof TimeEntry ? $this->entryPersonName($entry) : 'Necunoscut',
+                    'hours' => round(((int) $entries->sum('duration_seconds')) / 3600, 2),
+                    'tasks' => $entries->pluck('click_up_task_id')->filter()->unique()->count(),
+                    'projects' => $this->chartHoursRows($entries, $projectLabelsByTask),
+                ];
+            })
+            ->sort(fn (array $first, array $second): int => $second['hours'] <=> $first['hours'])
+            ->values()
+            ->all());
+        $timeline = array_values($this->chartBuckets($period, $rangeStart, $rangeEnd)
+            ->map(function (array $bucket) use ($periodEntries, $projectLabelsByTask): array {
+                $entries = $periodEntries->filter(function (TimeEntry $entry) use ($bucket): bool {
+                    $startedAt = CarbonImmutable::parse($entry->started_at)
+                        ->setTimezone(config('app.timezone'));
+
+                    return $startedAt->betweenIncluded($bucket['start'], $bucket['end']);
+                });
+
+                return [
+                    'key' => $bucket['key'],
+                    'label' => $bucket['label'],
+                    'hours' => round(((int) $entries->sum('duration_seconds')) / 3600, 2),
+                    'projects' => $this->chartHoursRows($entries, $projectLabelsByTask),
+                ];
+            })
+            ->all());
+
+        return [
+            'timeline' => $timeline,
+            'projects' => $projectRows,
+            'people' => $people,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, TimeEntry>  $entries
+     * @param  Collection<int, string>  $projectLabelsByTask
+     * @return list<array{label: string, hours: float}>
+     */
+    private function chartHoursRows(Collection $entries, Collection $projectLabelsByTask): array
+    {
+        return array_values($entries
+            ->groupBy(fn (TimeEntry $entry): string => (string) $projectLabelsByTask->get(
+                $entry->click_up_task_id,
+                'Activități interne',
+            ))
+            ->map(fn (Collection $projectEntries, string $label): array => [
+                'label' => $label,
+                'hours' => round(((int) $projectEntries->sum('duration_seconds')) / 3600, 2),
+            ])
+            ->sort(function (array $first, array $second): int {
+                $hoursComparison = $second['hours'] <=> $first['hours'];
+
+                return $hoursComparison !== 0
+                    ? $hoursComparison
+                    : strnatcasecmp($first['label'], $second['label']);
+            })
+            ->values()
+            ->all());
+    }
+
+    /**
+     * @return Collection<int, array{key: string, label: string, start: CarbonImmutable, end: CarbonImmutable}>
+     */
+    private function chartBuckets(
+        string $period,
+        CarbonImmutable $rangeStart,
+        CarbonImmutable $rangeEnd,
+    ): Collection {
+        $buckets = collect();
+        $cursor = $rangeStart->startOfDay();
+
+        while ($cursor->lessThanOrEqualTo($rangeEnd)) {
+            $bucketEnd = $period === 'month'
+                ? $cursor->endOfWeek()->min($rangeEnd)
+                : $cursor->endOfDay();
+            $buckets->push([
+                'key' => $cursor->toDateString(),
+                'label' => $period === 'month'
+                    ? $this->shortDate($cursor).'–'.$this->shortDate($bucketEnd)
+                    : $this->shortWeekday($cursor).' '.$cursor->day,
+                'start' => $cursor,
+                'end' => $bucketEnd,
+            ]);
+            $cursor = $bucketEnd->addDay()->startOfDay();
+        }
+
+        return $buckets;
     }
 
     private function entryPersonName(TimeEntry $entry): string
@@ -639,6 +771,19 @@ class PmBoardData
     private function shortDate(CarbonImmutable $date): string
     {
         return $date->day.' '.mb_strtolower(mb_substr($this->monthName($date), 0, 3));
+    }
+
+    private function shortWeekday(CarbonImmutable $date): string
+    {
+        return [
+            1 => 'Lun',
+            2 => 'Mar',
+            3 => 'Mie',
+            4 => 'Joi',
+            5 => 'Vin',
+            6 => 'Sâm',
+            7 => 'Dum',
+        ][$date->dayOfWeekIso];
     }
 
     private function monthName(CarbonImmutable $date): string

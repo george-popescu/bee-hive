@@ -13,6 +13,8 @@ import { Fragment, useState } from 'react';
 import { toast } from 'sonner';
 import { store as syncClickUp } from '@/actions/App/Http/Controllers/ClickUpSyncController';
 import { upsert as upsertWeeklyPlanning } from '@/actions/App/Http/Controllers/WeeklyPlanningController';
+import { SummaryCharts } from '@/components/pm-board/summary-charts';
+import type { SummaryChartData } from '@/components/pm-board/summary-charts';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -156,6 +158,7 @@ type Props = {
     workedTasks: BoardTask[];
     upcomingTasks: BoardTask[];
     peopleWorked: Array<{ name: string; hours: number; tasks: number }>;
+    summaryCharts: SummaryChartData;
     planning: Planning | null;
     gantt: Gantt | null;
     kpis: {
@@ -504,6 +507,7 @@ export default function PmBoard({
     workedTasks,
     upcomingTasks,
     peopleWorked,
+    summaryCharts,
     planning,
     gantt,
     kpis,
@@ -562,8 +566,8 @@ export default function PmBoard({
     const isDeliverables = selectedProject?.template === 'deliverables';
     const showProjectLabels = selectedProject === null;
     const activeSection = isDeliverables
-        ? section === 'summary' || section === 'people'
-            ? 'worked'
+        ? section === 'people'
+            ? 'summary'
             : section
         : section === 'planning' || section === 'gantt'
           ? 'summary'
@@ -999,11 +1003,9 @@ export default function PmBoard({
                             }}
                             className="flex-wrap justify-start"
                         >
-                            {!isDeliverables && (
-                                <ToggleGroupItem value="summary">
-                                    Sumar
-                                </ToggleGroupItem>
-                            )}
+                            <ToggleGroupItem value="summary">
+                                Sumar
+                            </ToggleGroupItem>
                             <ToggleGroupItem value="worked">
                                 {isDeliverables
                                     ? '① Săptămâna anterioară'
@@ -1029,92 +1031,108 @@ export default function PmBoard({
                         </ToggleGroup>
 
                         {activeSection === 'summary' && (
-                            <div className="grid gap-4 lg:grid-cols-2">
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>
-                                            Consum în perioadă
-                                        </CardTitle>
-                                        <CardDescription>
-                                            Primele taskuri după orele pontate.
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        {workedTasks.slice(0, 5).map((task) => (
-                                            <div
-                                                key={task.id}
-                                                className="flex items-center justify-between gap-3 border-b pb-3 last:border-0 last:pb-0"
-                                            >
-                                                <div className="min-w-0">
-                                                    <a
-                                                        href={task.url}
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        className="line-clamp-1 font-medium hover:underline"
+                            <div className="flex flex-col gap-4">
+                                <SummaryCharts
+                                    data={summaryCharts}
+                                    periodLabel={period.label}
+                                    periodType={period.type}
+                                />
+                                <div className="grid gap-4 lg:grid-cols-2">
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle>
+                                                Consum în perioadă
+                                            </CardTitle>
+                                            <CardDescription>
+                                                Primele taskuri după orele
+                                                pontate.
+                                            </CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="flex flex-col gap-3">
+                                            {workedTasks
+                                                .slice(0, 5)
+                                                .map((task) => (
+                                                    <div
+                                                        key={task.id}
+                                                        className="flex items-center justify-between gap-3 border-b pb-3 last:border-0 last:pb-0"
                                                     >
-                                                        {task.name}
-                                                    </a>
-                                                    {showProjectLabels && (
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {task.projectLabel}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <span className="shrink-0 tabular-nums">
-                                                    {hours(task.periodHours)}
-                                                </span>
-                                            </div>
-                                        ))}
-                                        {workedTasks.length === 0 && (
-                                            <p className="text-sm text-muted-foreground">
-                                                Nu există pontaje în perioada
-                                                aleasă.
-                                            </p>
-                                        )}
-                                    </CardContent>
-                                </Card>
-                                <Card>
-                                    <CardHeader>
-                                        <CardTitle>De urmărit</CardTitle>
-                                        <CardDescription>
-                                            Taskuri active ordonate după status
-                                            și termen.
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        {upcomingTasks
-                                            .slice(0, 5)
-                                            .map((task) => (
-                                                <div
-                                                    key={task.id}
-                                                    className="flex items-center justify-between gap-3 border-b pb-3 last:border-0 last:pb-0"
-                                                >
-                                                    <div className="min-w-0">
-                                                        <a
-                                                            href={task.url}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="line-clamp-1 font-medium hover:underline"
-                                                        >
-                                                            {task.name}
-                                                        </a>
-                                                        <span className="text-xs text-muted-foreground">
-                                                            {showProjectLabels
-                                                                ? `${task.projectLabel} · ${task.dueDate ?? 'fără termen'}`
-                                                                : (task.dueDate ??
-                                                                  'fără termen')}
+                                                        <div className="min-w-0">
+                                                            <a
+                                                                href={task.url}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="line-clamp-1 font-medium hover:underline"
+                                                            >
+                                                                {task.name}
+                                                            </a>
+                                                            {showProjectLabels && (
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    {
+                                                                        task.projectLabel
+                                                                    }
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <span className="shrink-0 tabular-nums">
+                                                            {hours(
+                                                                task.periodHours,
+                                                            )}
                                                         </span>
                                                     </div>
-                                                    <TaskStatus task={task} />
-                                                </div>
-                                            ))}
-                                        {upcomingTasks.length === 0 && (
-                                            <p className="text-sm text-muted-foreground">
-                                                Nu există taskuri active.
-                                            </p>
-                                        )}
-                                    </CardContent>
-                                </Card>
+                                                ))}
+                                            {workedTasks.length === 0 && (
+                                                <p className="text-sm text-muted-foreground">
+                                                    Nu există pontaje în
+                                                    perioada aleasă.
+                                                </p>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                    <Card>
+                                        <CardHeader>
+                                            <CardTitle>De urmărit</CardTitle>
+                                            <CardDescription>
+                                                Taskuri active ordonate după
+                                                status și termen.
+                                            </CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="flex flex-col gap-3">
+                                            {upcomingTasks
+                                                .slice(0, 5)
+                                                .map((task) => (
+                                                    <div
+                                                        key={task.id}
+                                                        className="flex items-center justify-between gap-3 border-b pb-3 last:border-0 last:pb-0"
+                                                    >
+                                                        <div className="min-w-0">
+                                                            <a
+                                                                href={task.url}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="line-clamp-1 font-medium hover:underline"
+                                                            >
+                                                                {task.name}
+                                                            </a>
+                                                            <span className="text-xs text-muted-foreground">
+                                                                {showProjectLabels
+                                                                    ? `${task.projectLabel} · ${task.dueDate ?? 'fără termen'}`
+                                                                    : (task.dueDate ??
+                                                                      'fără termen')}
+                                                            </span>
+                                                        </div>
+                                                        <TaskStatus
+                                                            task={task}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            {upcomingTasks.length === 0 && (
+                                                <p className="text-sm text-muted-foreground">
+                                                    Nu există taskuri active.
+                                                </p>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                </div>
                             </div>
                         )}
 

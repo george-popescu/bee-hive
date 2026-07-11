@@ -203,7 +203,11 @@ it('uses calendar month boundaries and month navigation', function () {
             ->where('period.label', 'Iulie 2026')
             ->where('period.previousAnchor', '2026-06-15')
             ->where('period.nextAnchor', '2026-08-15')
-            ->where('workedTasks.0.periodHours', 2));
+            ->where('workedTasks.0.periodHours', 2)
+            ->has('summaryCharts.timeline', 5)
+            ->where('summaryCharts.timeline.0.label', '1 iul–5 iul')
+            ->where('summaryCharts.timeline.4.label', '27 iul–31 iul')
+            ->where('summaryCharts.timeline.4.hours', 2));
 });
 
 it('uses Bucharest calendar boundaries while storing timestamps in UTC', function () {
@@ -327,6 +331,25 @@ it('aggregates every visible project when no individual project is selected', fu
             ->where('workedTasks.1.periodHours', 2)
             ->has('upcomingTasks', 2)
             ->where('peopleWorked.0', ['name' => 'Ana', 'hours' => 5, 'tasks' => 2])
+            ->where('summaryCharts.projects', [
+                ['label' => 'Beta — Mobile', 'hours' => 3],
+                ['label' => 'Acme — Portal', 'hours' => 2],
+            ])
+            ->has('summaryCharts.timeline', 7)
+            ->where('summaryCharts.timeline.2.label', 'Mie 8')
+            ->where('summaryCharts.timeline.2.hours', 5)
+            ->where('summaryCharts.timeline.2.projects', [
+                ['label' => 'Beta — Mobile', 'hours' => 3],
+                ['label' => 'Acme — Portal', 'hours' => 2],
+            ])
+            ->where('summaryCharts.people.0.key', 'person:'.$person->id)
+            ->where('summaryCharts.people.0.name', 'Ana')
+            ->where('summaryCharts.people.0.hours', 5)
+            ->where('summaryCharts.people.0.tasks', 2)
+            ->where('summaryCharts.people.0.projects', [
+                ['label' => 'Beta — Mobile', 'hours' => 3],
+                ['label' => 'Acme — Portal', 'hours' => 2],
+            ])
             ->where('planning', null)
             ->where('gantt', null)
             ->where('kpis.actualHours', 5)
