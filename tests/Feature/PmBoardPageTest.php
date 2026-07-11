@@ -1,6 +1,9 @@
 <?php
 
+use App\Enums\ClickUpLocationKind;
 use App\Enums\PermissionName;
+use App\Models\ClickUpFolder;
+use App\Models\ClickUpList;
 use App\Models\ClickUpTask;
 use App\Models\Person;
 use App\Models\Project;
@@ -330,6 +333,105 @@ it('aggregates every visible project when no individual project is selected', fu
             ->where('kpis.workedTasks', 2)
             ->where('kpis.activePeople', 1)
             ->where('kpis.projects', 2));
+});
+
+it('aggregates a custom selection of multiple projects', function () {
+    $user = globalPmBoardViewer();
+    $firstProject = Project::factory()->create(['client' => 'Acme', 'name' => 'Portal']);
+    $secondProject = Project::factory()->create(['client' => 'Beta', 'name' => 'Mobile']);
+    $excludedProject = Project::factory()->create(['client' => 'Gamma', 'name' => 'Store']);
+
+    foreach ([[$firstProject, 2], [$secondProject, 3], [$excludedProject, 7]] as [$project, $hours]) {
+        $task = ClickUpTask::factory()->create(['project_id' => $project]);
+        TimeEntry::factory()->create([
+            'project_id' => $project,
+            'click_up_task_id' => $task,
+            'started_at' => '2026-07-08 10:00:00',
+            'duration_seconds' => $hours * 3600,
+        ]);
+    }
+
+    $this->actingAs($user)
+        ->get(route('pm_board.index', [
+            'selection' => 'custom',
+            'projects' => [$firstProject->id, $secondProject->id],
+            'period' => 'week',
+            'anchor' => '2026-07-08',
+        ]))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('allProjectsSelected', false)
+            ->where('selectedProjectIds', [$secondProject->id, $firstProject->id])
+            ->where('includeInternal', false)
+            ->where('selectedProject', null)
+            ->has('workedTasks', 2)
+            ->where('kpis.actualHours', 5));
+});
+
+it('shows ClickUp calls and overhead as selectable internal activity', function () {
+    $user = globalPmBoardViewer();
+    $project = Project::factory()->create(['client' => 'Acme', 'name' => 'Portal']);
+    $projectTask = ClickUpTask::factory()->create(['project_id' => $project]);
+    $internalFolder = ClickUpFolder::factory()->create([
+        'kind' => ClickUpLocationKind::Internal,
+        'name' => 'BEE CODED Non-Project Tasks',
+    ]);
+    $internalList = ClickUpList::factory()->create([
+        'click_up_folder_id' => $internalFolder,
+        'project_id' => null,
+        'name' => 'Overhead',
+    ]);
+    $internalTask = ClickUpTask::factory()->create([
+        'project_id' => null,
+        'clickup_list_id' => $internalList->clickup_list_id,
+        'name' => 'Calls interne',
+    ]);
+    $unmappedList = ClickUpList::factory()->create(['project_id' => null]);
+    $unmappedTask = ClickUpTask::factory()->create([
+        'project_id' => null,
+        'clickup_list_id' => $unmappedList->clickup_list_id,
+        'name' => 'Proiect client nemapat',
+    ]);
+
+    foreach ([[$projectTask, $project, 2], [$internalTask, null, 4], [$unmappedTask, null, 8]] as [$task, $taskProject, $hours]) {
+        TimeEntry::factory()->create([
+            'project_id' => $taskProject,
+            'click_up_task_id' => $task,
+            'started_at' => '2026-07-08 10:00:00',
+            'duration_seconds' => $hours * 3600,
+        ]);
+    }
+
+    $this->actingAs($user)
+        ->get(route('pm_board.index', [
+            'selection' => 'custom',
+            'include_internal' => true,
+            'period' => 'week',
+            'anchor' => '2026-07-08',
+        ]))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('allProjectsSelected', false)
+            ->where('selectedProjectIds', [])
+            ->where('includeInternal', true)
+            ->where('internalOption.available', true)
+            ->where('internalOption.periodHours', 4)
+            ->has('workedTasks', 1)
+            ->where('workedTasks.0.name', 'Calls interne')
+            ->where('workedTasks.0.projectLabel', 'Activități interne')
+            ->where('kpis.actualHours', 4));
+
+    $this->actingAs($user)
+        ->get(route('pm_board.index', [
+            'period' => 'week',
+            'anchor' => '2026-07-08',
+        ]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('allProjectsSelected', true)
+            ->where('selectedProjectIds', [$project->id])
+            ->where('includeInternal', true)
+            ->has('workedTasks', 2)
+            ->where('kpis.actualHours', 6));
 });
 
 it('keeps contributors with the same display name separate by stable identity', function () {

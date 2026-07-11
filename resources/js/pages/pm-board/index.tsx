@@ -2,6 +2,7 @@ import { Head, Link, router, useHttp } from '@inertiajs/react';
 import {
     ArrowLeft,
     ArrowRight,
+    ChevronDown,
     ExternalLink,
     LayoutDashboard,
     RefreshCw,
@@ -22,6 +23,16 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuGroup,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -29,8 +40,6 @@ import {
     SelectContent,
     SelectGroup,
     SelectItem,
-    SelectLabel,
-    SelectSeparator,
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
@@ -135,6 +144,13 @@ type Props = {
     managers: Array<{ id: number; name: string }>;
     selectedPmId: number | null;
     allProjectsSelected: boolean;
+    selectedProjectIds: number[];
+    includeInternal: boolean;
+    internalOption: {
+        label: string;
+        periodHours: number;
+        available: boolean;
+    };
     selectedProject: Project | null;
     period: Period;
     workedTasks: BoardTask[];
@@ -171,6 +187,11 @@ type WeeklyPlanningPayload = {
 type WeeklyPlanningResponse = {
     plan: { id: number; selected: boolean; version: number; updatedAt: string };
 };
+type ProjectSelection = {
+    all: boolean;
+    projectIds: number[];
+    includeInternal: boolean;
+};
 
 function hours(value: number | null): string {
     return value === null
@@ -179,19 +200,35 @@ function hours(value: number | null): string {
 }
 
 function boardHref(
-    project: number | null,
+    selection: ProjectSelection,
     period: Period,
     anchor: string,
     pm: number | null,
 ) {
     return pmBoardIndex({
         query: {
-            ...(project === null ? {} : { project }),
+            ...selectionQuery(selection),
             period: period.type,
             anchor,
             ...(pm === null ? {} : { pm }),
         },
     });
+}
+
+function selectionQuery(selection: ProjectSelection) {
+    if (selection.all) {
+        return {};
+    }
+
+    if (selection.projectIds.length === 1 && !selection.includeInternal) {
+        return { project: selection.projectIds[0] };
+    }
+
+    return {
+        selection: 'custom',
+        projects: selection.projectIds,
+        ...(selection.includeInternal ? { include_internal: true } : {}),
+    };
 }
 
 function TaskStatus({ task }: { task: BoardTask }) {
@@ -459,6 +496,9 @@ export default function PmBoard({
     managers,
     selectedPmId,
     allProjectsSelected,
+    selectedProjectIds,
+    includeInternal,
+    internalOption,
     selectedProject,
     period,
     workedTasks,
@@ -474,12 +514,53 @@ export default function PmBoard({
     const [displayMode, setDisplayMode] = useState<'presentation' | 'edit'>(
         'presentation',
     );
-    const currentProjectId = selectedProject?.id ?? null;
-    const allPeriodHours = projects.reduce(
-        (total, project) => total + project.periodHours,
-        0,
-    );
+    const [projectSelectorOpen, setProjectSelectorOpen] = useState(false);
+    const [draftAllProjects, setDraftAllProjects] =
+        useState(allProjectsSelected);
+    const [draftProjectIds, setDraftProjectIds] =
+        useState<number[]>(selectedProjectIds);
+    const [draftIncludeInternal, setDraftIncludeInternal] =
+        useState(includeInternal);
+    const currentSelection: ProjectSelection = {
+        all: allProjectsSelected,
+        projectIds: selectedProjectIds,
+        includeInternal,
+    };
+    const allPeriodHours =
+        projects.reduce((total, project) => total + project.periodHours, 0) +
+        internalOption.periodHours;
+    const selectedPeriodHours =
+        projects
+            .filter((project) => selectedProjectIds.includes(project.id))
+            .reduce((total, project) => total + project.periodHours, 0) +
+        (includeInternal ? internalOption.periodHours : 0);
+    const selectedItemsCount =
+        selectedProjectIds.length + (includeInternal ? 1 : 0);
+    const selectedItemsLabel =
+        selectedItemsCount === 1
+            ? '1 selecție'
+            : `${selectedItemsCount} selecții`;
+    const selectionHeading = allProjectsSelected
+        ? 'Toate proiectele'
+        : selectedProject
+          ? selectedProject.label
+          : selectedProjectIds.length === 0 && includeInternal
+            ? internalOption.label
+            : 'Selecție personalizată';
+    const selectionBadge = allProjectsSelected
+        ? `${projects.length} proiecte${internalOption.available ? ' + interne' : ''}`
+        : selectedProject
+          ? selectedProject.templateLabel
+          : selectedItemsLabel;
+    const selectorLabel = allProjectsSelected
+        ? `Toate proiectele · ${hours(allPeriodHours)}`
+        : selectedProject
+          ? `${selectedProject.label} · ${hours(selectedPeriodHours)}`
+          : selectedProjectIds.length === 0 && includeInternal
+            ? `${internalOption.label} · ${hours(selectedPeriodHours)}`
+            : `${selectedItemsLabel} · ${hours(selectedPeriodHours)}`;
     const isDeliverables = selectedProject?.template === 'deliverables';
+    const showProjectLabels = selectedProject === null;
     const activeSection = isDeliverables
         ? section === 'summary' || section === 'people'
             ? 'worked'
@@ -488,7 +569,7 @@ export default function PmBoard({
           ? 'summary'
           : section;
     const navigate = (
-        project: number | null,
+        selection: ProjectSelection = currentSelection,
         periodType = period.type,
         anchor = period.anchor,
         pm = selectedPmId,
@@ -496,7 +577,7 @@ export default function PmBoard({
         router.visit(
             pmBoardIndex({
                 query: {
-                    ...(project === null ? {} : { project }),
+                    ...selectionQuery(selection),
                     period: periodType,
                     anchor,
                     ...(pm === null ? {} : { pm }),
@@ -505,6 +586,33 @@ export default function PmBoard({
             { preserveScroll: true },
         );
     };
+    const handleProjectSelectorOpen = (open: boolean) => {
+        if (open) {
+            setDraftAllProjects(allProjectsSelected);
+            setDraftProjectIds(
+                allProjectsSelected
+                    ? projects.map((project) => project.id)
+                    : selectedProjectIds,
+            );
+            setDraftIncludeInternal(
+                allProjectsSelected
+                    ? internalOption.available
+                    : includeInternal,
+            );
+        }
+
+        setProjectSelectorOpen(open);
+    };
+    const applyProjectSelection = () => {
+        navigate({
+            all: draftAllProjects,
+            projectIds: draftProjectIds,
+            includeInternal: draftIncludeInternal,
+        });
+        setProjectSelectorOpen(false);
+    };
+    const canApplyProjectSelection =
+        draftAllProjects || draftProjectIds.length > 0 || draftIncludeInternal;
 
     return (
         <>
@@ -530,7 +638,11 @@ export default function PmBoard({
                                 value={selectedPmId?.toString() ?? 'all'}
                                 onValueChange={(value) =>
                                     navigate(
-                                        null,
+                                        {
+                                            all: true,
+                                            projectIds: [],
+                                            includeInternal: true,
+                                        },
                                         period.type,
                                         period.anchor,
                                         value === 'all' ? null : Number(value),
@@ -541,17 +653,19 @@ export default function PmBoard({
                                     <SelectValue placeholder="Toți PM-ii" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="all">
-                                        Toți PM-ii
-                                    </SelectItem>
-                                    {managers.map((manager) => (
-                                        <SelectItem
-                                            key={manager.id}
-                                            value={manager.id.toString()}
-                                        >
-                                            {manager.name}
+                                    <SelectGroup>
+                                        <SelectItem value="all">
+                                            Toți PM-ii
                                         </SelectItem>
-                                    ))}
+                                        {managers.map((manager) => (
+                                            <SelectItem
+                                                key={manager.id}
+                                                value={manager.id.toString()}
+                                            >
+                                                {manager.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectGroup>
                                 </SelectContent>
                             </Select>
                         )}
@@ -568,12 +682,11 @@ export default function PmBoard({
                             <ToggleGroupItem value="presentation">
                                 Prezentare
                             </ToggleGroupItem>
-                            {permissions.managePlanning &&
-                                !allProjectsSelected && (
-                                    <ToggleGroupItem value="edit">
-                                        Editare
-                                    </ToggleGroupItem>
-                                )}
+                            {permissions.managePlanning && isDeliverables && (
+                                <ToggleGroupItem value="edit">
+                                    Editare
+                                </ToggleGroupItem>
+                            )}
                         </ToggleGroup>
                         {permissions.syncClickUp && (
                             <Button
@@ -594,55 +707,145 @@ export default function PmBoard({
                     </div>
                 </div>
 
-                {projects.length > 0 && (
+                {(projects.length > 0 || internalOption.available) && (
                     <div className="grid w-full gap-2 sm:max-w-md">
-                        <Label htmlFor="project-selector">Proiect</Label>
-                        <Select
-                            value={
-                                allProjectsSelected
-                                    ? 'all'
-                                    : currentProjectId?.toString()
-                            }
-                            onValueChange={(value) =>
-                                navigate(value === 'all' ? null : Number(value))
-                            }
+                        <Label htmlFor="project-selector">Proiecte</Label>
+                        <DropdownMenu
+                            open={projectSelectorOpen}
+                            onOpenChange={handleProjectSelectorOpen}
                         >
-                            <SelectTrigger
-                                id="project-selector"
-                                className="w-full"
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    id="project-selector"
+                                    variant="outline"
+                                    className="w-full justify-between"
+                                >
+                                    <span className="truncate">
+                                        {selectorLabel}
+                                    </span>
+                                    <ChevronDown data-icon="inline-end" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                                align="start"
+                                className="max-h-[var(--radix-dropdown-menu-content-available-height)] w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto"
                             >
-                                <SelectValue placeholder="Alege un proiect" />
-                            </SelectTrigger>
-                            <SelectContent align="start">
-                                <SelectGroup>
-                                    <SelectLabel>Vedere</SelectLabel>
-                                    <SelectItem value="all">
-                                        Toate proiectele ·{' '}
-                                        {hours(allPeriodHours)}
-                                    </SelectItem>
-                                </SelectGroup>
-                                <SelectSeparator />
-                                <SelectGroup>
-                                    <SelectLabel>
+                                <DropdownMenuGroup>
+                                    <DropdownMenuLabel>
+                                        Vedere
+                                    </DropdownMenuLabel>
+                                    <DropdownMenuCheckboxItem
+                                        checked={draftAllProjects}
+                                        onCheckedChange={(checked) => {
+                                            setDraftAllProjects(
+                                                checked === true,
+                                            );
+
+                                            if (checked === true) {
+                                                setDraftProjectIds(
+                                                    projects.map(
+                                                        (project) => project.id,
+                                                    ),
+                                                );
+                                                setDraftIncludeInternal(
+                                                    internalOption.available,
+                                                );
+                                            } else {
+                                                setDraftProjectIds([]);
+                                                setDraftIncludeInternal(false);
+                                            }
+                                        }}
+                                        onSelect={(event) =>
+                                            event.preventDefault()
+                                        }
+                                    >
+                                        <span className="flex-1 truncate">
+                                            Toate proiectele
+                                        </span>
+                                        <span className="text-muted-foreground tabular-nums">
+                                            {hours(allPeriodHours)}
+                                        </span>
+                                    </DropdownMenuCheckboxItem>
+                                </DropdownMenuGroup>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuGroup>
+                                    <DropdownMenuLabel>
                                         Proiecte disponibile
-                                    </SelectLabel>
+                                    </DropdownMenuLabel>
                                     {projects.map((project) => (
-                                        <SelectItem
+                                        <DropdownMenuCheckboxItem
                                             key={project.id}
-                                            value={project.id.toString()}
+                                            checked={draftProjectIds.includes(
+                                                project.id,
+                                            )}
+                                            onCheckedChange={(checked) => {
+                                                setDraftAllProjects(false);
+                                                setDraftProjectIds(
+                                                    checked === true
+                                                        ? Array.from(
+                                                              new Set([
+                                                                  ...draftProjectIds,
+                                                                  project.id,
+                                                              ]),
+                                                          )
+                                                        : draftProjectIds.filter(
+                                                              (projectId) =>
+                                                                  projectId !==
+                                                                  project.id,
+                                                          ),
+                                                );
+                                            }}
+                                            onSelect={(event) =>
+                                                event.preventDefault()
+                                            }
                                         >
-                                            {project.label} —{' '}
-                                            {project.templateLabel} ·{' '}
-                                            {hours(project.periodHours)}
-                                        </SelectItem>
+                                            <span className="flex-1 truncate">
+                                                {project.label}
+                                            </span>
+                                            <span className="text-muted-foreground tabular-nums">
+                                                {hours(project.periodHours)}
+                                            </span>
+                                        </DropdownMenuCheckboxItem>
                                     ))}
-                                </SelectGroup>
-                            </SelectContent>
-                        </Select>
+                                    {internalOption.available && (
+                                        <DropdownMenuCheckboxItem
+                                            checked={draftIncludeInternal}
+                                            onCheckedChange={(checked) => {
+                                                setDraftAllProjects(false);
+                                                setDraftIncludeInternal(
+                                                    checked === true,
+                                                );
+                                            }}
+                                            onSelect={(event) =>
+                                                event.preventDefault()
+                                            }
+                                        >
+                                            <span className="flex-1 truncate">
+                                                {internalOption.label}
+                                            </span>
+                                            <span className="text-muted-foreground tabular-nums">
+                                                {hours(
+                                                    internalOption.periodHours,
+                                                )}
+                                            </span>
+                                        </DropdownMenuCheckboxItem>
+                                    )}
+                                </DropdownMenuGroup>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuGroup>
+                                    <DropdownMenuItem
+                                        disabled={!canApplyProjectSelection}
+                                        onSelect={applyProjectSelection}
+                                    >
+                                        Aplică selecția
+                                    </DropdownMenuItem>
+                                </DropdownMenuGroup>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 )}
 
-                {projects.length === 0 ? (
+                {projects.length === 0 && !internalOption.available ? (
                     <Card>
                         <CardHeader>
                             <CardTitle>Niciun proiect disponibil</CardTitle>
@@ -659,17 +862,13 @@ export default function PmBoard({
                                 <div>
                                     <div className="flex flex-wrap items-center gap-2">
                                         <h2 className="text-xl font-semibold">
-                                            {allProjectsSelected
-                                                ? 'Toate proiectele'
-                                                : selectedProject?.label}
+                                            {selectionHeading}
                                         </h2>
                                         <Badge variant="outline">
-                                            {allProjectsSelected
-                                                ? `${projects.length} proiecte`
-                                                : selectedProject?.templateLabel}
+                                            {selectionBadge}
                                         </Badge>
                                         {displayMode === 'edit' &&
-                                            !allProjectsSelected && (
+                                            isDeliverables && (
                                                 <Badge variant="warning">
                                                     Mod editare
                                                 </Badge>
@@ -705,7 +904,7 @@ export default function PmBoard({
                                             onValueChange={(value) => {
                                                 if (value) {
                                                     navigate(
-                                                        currentProjectId,
+                                                        currentSelection,
                                                         value as Period['type'],
                                                     );
                                                 }
@@ -726,7 +925,7 @@ export default function PmBoard({
                                     >
                                         <Link
                                             href={boardHref(
-                                                currentProjectId,
+                                                currentSelection,
                                                 period,
                                                 period.previousAnchor,
                                                 selectedPmId,
@@ -747,7 +946,7 @@ export default function PmBoard({
                                     >
                                         <Link
                                             href={boardHref(
-                                                currentProjectId,
+                                                currentSelection,
                                                 period,
                                                 period.nextAnchor,
                                                 selectedPmId,
@@ -855,7 +1054,7 @@ export default function PmBoard({
                                                     >
                                                         {task.name}
                                                     </a>
-                                                    {allProjectsSelected && (
+                                                    {showProjectLabels && (
                                                         <span className="text-xs text-muted-foreground">
                                                             {task.projectLabel}
                                                         </span>
@@ -900,7 +1099,7 @@ export default function PmBoard({
                                                             {task.name}
                                                         </a>
                                                         <span className="text-xs text-muted-foreground">
-                                                            {allProjectsSelected
+                                                            {showProjectLabels
                                                                 ? `${task.projectLabel} · ${task.dueDate ?? 'fără termen'}`
                                                                 : (task.dueDate ??
                                                                   'fără termen')}
@@ -961,7 +1160,7 @@ export default function PmBoard({
                                                                 {task.name}
                                                                 <ExternalLink className="size-3" />
                                                             </a>
-                                                            {allProjectsSelected && (
+                                                            {showProjectLabels && (
                                                                 <span className="text-xs text-muted-foreground">
                                                                     {
                                                                         task.projectLabel
@@ -1079,7 +1278,7 @@ export default function PmBoard({
                                                                           task.name
                                                                       }
                                                                   </a>
-                                                                  {allProjectsSelected && (
+                                                                  {showProjectLabels && (
                                                                       <span className="text-xs text-muted-foreground">
                                                                           {
                                                                               task.projectLabel

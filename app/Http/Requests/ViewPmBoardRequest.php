@@ -28,6 +28,10 @@ class ViewPmBoardRequest extends FormRequest
     {
         return [
             'project' => ['nullable', 'integer', Rule::exists((new Project)->getTable(), 'id')],
+            'selection' => ['nullable', Rule::in(['custom'])],
+            'projects' => ['nullable', 'array'],
+            'projects.*' => ['integer', 'distinct', Rule::exists((new Project)->getTable(), 'id')],
+            'include_internal' => ['nullable', 'boolean'],
             'pm' => ['nullable', 'integer', Rule::exists((new Person)->getTable(), 'id')],
             'period' => ['nullable', Rule::in(['week', 'month'])],
             'anchor' => ['nullable', 'date_format:Y-m-d'],

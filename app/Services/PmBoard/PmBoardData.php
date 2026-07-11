@@ -2,8 +2,11 @@
 
 namespace App\Services\PmBoard;
 
+use App\Enums\ClickUpLocationKind;
 use App\Enums\PermissionName;
 use App\Enums\ProjectBoardTemplate;
+use App\Models\ClickUpFolder;
+use App\Models\ClickUpList;
 use App\Models\ClickUpTask;
 use App\Models\Person;
 use App\Models\Project;
@@ -20,10 +23,15 @@ class PmBoardData
 {
     public function __construct(private readonly PmBoardScope $scope) {}
 
-    /** @return array<string, mixed> */
+    /**
+     * @param  list<int>  $selectedProjectIds
+     * @return array<string, mixed>
+     */
     public function for(
         User $user,
-        ?int $selectedProjectId,
+        array $selectedProjectIds,
+        bool $includeInternal,
+        bool $allProjectsSelected,
         string $period,
         CarbonImmutable $anchor,
         ?int $pmId,
@@ -31,7 +39,7 @@ class PmBoardData
         $projectIds = $this->scope->projectIds($user);
         $period = $period === 'month' ? 'month' : 'week';
 
-        if ($selectedProjectId !== null && ! in_array($selectedProjectId, $projectIds, true)) {
+        if (array_diff($selectedProjectIds, $projectIds) !== []) {
             throw new AuthorizationException;
         }
 
@@ -53,8 +61,12 @@ class PmBoardData
         [$rangeStart, $rangeEnd] = $this->range($anchor, $period);
         $periodSecondsByProject = $this->periodSecondsByProject($projects, $rangeStart, $rangeEnd);
         $projects = $this->orderProjectsByPeriodHours($projects, $periodSecondsByProject);
-        $allProjectsSelected = $selectedProjectId === null;
-        $selectedProject = $allProjectsSelected ? null : $projects->firstWhere('id', $selectedProjectId);
+        $selectedProjects = $allProjectsSelected
+            ? $projects
+            : $projects->whereIn('id', $selectedProjectIds)->values();
+        $selectedProject = $selectedProjects->count() === 1 && ! $includeInternal
+            ? $selectedProjects->first()
+            : null;
 
         if ($selectedProject instanceof Project && $selectedProject->contract_type === ProjectBoardTemplate::Deliverables) {
             $period = 'week';
@@ -62,12 +74,16 @@ class PmBoardData
             $periodSecondsByProject = $this->periodSecondsByProject($projects, $rangeStart, $rangeEnd);
             $projects = $this->orderProjectsByPeriodHours($projects, $periodSecondsByProject);
         }
-        $selectedProjects = $allProjectsSelected
-            ? $projects
-            : $projects->filter(fn (Project $project): bool => $project->is($selectedProject))->values();
+        $internalListIds = $this->internalListIds();
+        $internalPeriodSeconds = $this->internalPeriodSeconds($internalListIds, $rangeStart, $rangeEnd);
+        $internalOption = [
+            'label' => 'Activități interne',
+            'periodHours' => round($internalPeriodSeconds / 3600, 2),
+            'available' => $internalListIds->isNotEmpty(),
+        ];
         $sync = $this->syncStatus();
 
-        if ($selectedProjects->isEmpty()) {
+        if ($selectedProjects->isEmpty() && (! $includeInternal || $internalListIds->isEmpty())) {
             return [
                 'projects' => $projects->map(fn (Project $project): array => $this->projectData($project, $periodSecondsByProject))->all(),
                 'managers' => $managers->map(fn (Person $person): array => [
@@ -76,6 +92,9 @@ class PmBoardData
                 ])->all(),
                 'selectedPmId' => $pmId,
                 'allProjectsSelected' => $allProjectsSelected,
+                'selectedProjectIds' => [],
+                'includeInternal' => false,
+                'internalOption' => $internalOption,
                 'selectedProject' => null,
                 'period' => $this->periodData($period, $anchor, $rangeStart, $rangeEnd),
                 'workedTasks' => [],
@@ -101,9 +120,9 @@ class PmBoardData
 
         $taskIdsWithEntries = TimeEntry::query()
             ->select('click_up_task_id')
-            ->whereIn('project_id', $selectedProjects->modelKeys())
             ->whereNotNull('click_up_task_id')
             ->whereBetween('started_at', [$rangeStart->utc(), $rangeEnd->utc()]);
+        $selectedProjectKeys = $selectedProjects->modelKeys();
         $tasks = ClickUpTask::query()
             ->select([
                 'id',
@@ -117,7 +136,19 @@ class PmBoardData
                 'due_at',
                 'active',
             ])
-            ->whereIn('project_id', $selectedProjects->modelKeys())
+            ->where(function ($query) use ($includeInternal, $internalListIds, $selectedProjectKeys): void {
+                if ($selectedProjectKeys === []) {
+                    $query->whereIn('clickup_list_id', $internalListIds);
+
+                    return;
+                }
+
+                $query->whereIn('project_id', $selectedProjectKeys);
+
+                if ($includeInternal && $internalListIds->isNotEmpty()) {
+                    $query->orWhereIn('clickup_list_id', $internalListIds);
+                }
+            })
             ->where(fn ($query) => $query
                 ->where('active', true)
                 ->orWhereIn('id', $taskIdsWithEntries))
@@ -178,6 +209,9 @@ class PmBoardData
             ])->all(),
             'selectedPmId' => $pmId,
             'allProjectsSelected' => $allProjectsSelected,
+            'selectedProjectIds' => array_values($selectedProjects->modelKeys()),
+            'includeInternal' => $includeInternal,
+            'internalOption' => $internalOption,
             'selectedProject' => $selectedProject instanceof Project
                 ? $this->projectData($selectedProject, $periodSecondsByProject)
                 : null,
@@ -243,7 +277,7 @@ class PmBoardData
             'id' => $task->getKey(),
             'clickupId' => $task->clickup_task_id,
             'name' => $task->name,
-            'projectLabel' => $task->project instanceof Project ? $this->projectLabel($task->project) : 'Fără proiect',
+            'projectLabel' => $task->project instanceof Project ? $this->projectLabel($task->project) : 'Activități interne',
             'url' => "https://app.clickup.com/t/{$task->clickup_task_id}",
             'status' => $status === '' ? 'fără status' : $status,
             'statusGroup' => $statusGroup,
@@ -474,6 +508,35 @@ class PmBoardData
             ->groupBy('project_id')
             ->pluck('aggregate_seconds', 'project_id')
             ->map(fn (mixed $seconds): int => (int) $seconds);
+    }
+
+    /** @return Collection<int, string> */
+    private function internalListIds(): Collection
+    {
+        return ClickUpList::query()
+            ->whereIn('click_up_folder_id', ClickUpFolder::query()
+                ->select('id')
+                ->where('kind', ClickUpLocationKind::Internal))
+            ->pluck('clickup_list_id')
+            ->values();
+    }
+
+    /** @param Collection<int, string> $internalListIds */
+    private function internalPeriodSeconds(
+        Collection $internalListIds,
+        CarbonImmutable $rangeStart,
+        CarbonImmutable $rangeEnd,
+    ): int {
+        if ($internalListIds->isEmpty()) {
+            return 0;
+        }
+
+        return (int) TimeEntry::query()
+            ->whereIn('click_up_task_id', ClickUpTask::query()
+                ->select('id')
+                ->whereIn('clickup_list_id', $internalListIds))
+            ->whereBetween('started_at', [$rangeStart->utc(), $rangeEnd->utc()])
+            ->sum('duration_seconds');
     }
 
     /**
