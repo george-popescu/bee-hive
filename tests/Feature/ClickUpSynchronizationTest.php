@@ -249,6 +249,30 @@ it('does not map a structured ClickUp folder when its client conflicts with the 
         ->and(ClickUpList::query()->where('clickup_list_id', 'list-project')->sole()->project_id)->toBeNull();
 });
 
+it('maps folders and lists by the explicit ClickUp folder id instead of their names', function () {
+    $project = Project::factory()->create([
+        'clickup_space_id' => 'space-projects',
+        'clickup_folder_id' => 'folder-project',
+        'client' => 'Iancu Guda',
+        'name' => 'MiM DEV',
+    ]);
+    app()->instance(ClickUpClient::class, clickUpClientFake(projectFolderName: '[Different][Label]'));
+    $defaults = ClickUpSyncOptions::defaults();
+    $options = new ClickUpSyncOptions(
+        from: $defaults->from,
+        to: $defaults->to,
+        members: false,
+        tasks: false,
+        timeEntries: false,
+        timeOff: false,
+    );
+
+    app(ClickUpSyncService::class)->sync($options);
+
+    expect(ClickUpFolder::query()->where('clickup_folder_id', 'folder-project')->sole()->project_id)->toBe($project->id)
+        ->and(ClickUpList::query()->where('clickup_list_id', 'list-project')->sole()->project_id)->toBe($project->id);
+});
+
 it('closes stale running sync history before starting another run', function () {
     $staleRun = SyncRun::factory()->create([
         'status' => SyncRunStatus::Running,
@@ -281,7 +305,7 @@ it('synchronizes ClickUp data idempotently without changing the M1 allocation pl
     ]);
     $project = Project::factory()->create([
         'clickup_space_id' => null,
-        'clickup_folder_id' => null,
+        'clickup_folder_id' => 'folder-project',
         'client' => 'Acme',
         'name' => 'Portal',
     ]);

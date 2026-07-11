@@ -6,6 +6,7 @@ use App\Models\Person;
 use App\Models\Project;
 use App\Models\TimeEntry;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
 
@@ -200,6 +201,33 @@ it('uses calendar month boundaries and month navigation', function () {
             ->where('period.previousAnchor', '2026-06-15')
             ->where('period.nextAnchor', '2026-08-15')
             ->where('workedTasks.0.periodHours', 2));
+});
+
+it('uses Bucharest calendar boundaries while storing timestamps in UTC', function () {
+    expect(config('app.timezone'))->toBe('Europe/Bucharest')
+        ->and(config('database.connections.pgsql.timezone'))->toBe('UTC')
+        ->and(CarbonImmutable::parse('2026-07-08')->startOfWeek()->utc()->toIso8601String())
+        ->toBe('2026-07-05T21:00:00+00:00');
+
+    $user = globalPmBoardViewer();
+    $project = Project::factory()->create();
+    $task = ClickUpTask::factory()->create(['project_id' => $project]);
+    TimeEntry::factory()->create([
+        'click_up_task_id' => $task,
+        'project_id' => $project,
+        'started_at' => '2026-07-05 21:30:00',
+        'duration_seconds' => 2 * 3600,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('pm_board.index', [
+            'project' => $project->id,
+            'period' => 'week',
+            'anchor' => '2026-07-08',
+        ]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('workedTasks.0.periodHours', 2)
+            ->where('kpis.actualHours', 2));
 });
 
 it('orders projects by worked hours in the selected range', function () {

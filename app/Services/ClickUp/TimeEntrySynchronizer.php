@@ -120,7 +120,7 @@ final class TimeEntrySynchronizer
         }
 
         $seenIds = array_column($rows, 'clickup_time_entry_id');
-        $missingEntries = TimeEntry::query()->whereBetween('started_at', [$from, $to]);
+        $missingEntries = TimeEntry::query()->whereBetween('started_at', [$from->utc(), $to->utc()]);
 
         if ($seenIds !== []) {
             $missingEntries->whereNotIn('clickup_time_entry_id', $seenIds);

@@ -103,7 +103,7 @@ class PmBoardData
             ->select('click_up_task_id')
             ->whereIn('project_id', $selectedProjects->modelKeys())
             ->whereNotNull('click_up_task_id')
-            ->whereBetween('started_at', [$rangeStart, $rangeEnd]);
+            ->whereBetween('started_at', [$rangeStart->utc(), $rangeEnd->utc()]);
         $tasks = ClickUpTask::query()
             ->select([
                 'id',
@@ -128,7 +128,7 @@ class PmBoardData
         $periodEntryRows = TimeEntry::query()
             ->select(['id', 'click_up_task_id', 'person_id', 'clickup_user_id', 'person_name', 'duration_seconds', 'started_at'])
             ->whereIn('click_up_task_id', $taskIds)
-            ->whereBetween('started_at', [$rangeStart, $rangeEnd])
+            ->whereBetween('started_at', [$rangeStart->utc(), $rangeEnd->utc()])
             ->with(['person:id,name'])
             ->get();
         $periodEntries = $periodEntryRows->groupBy('click_up_task_id');
@@ -469,7 +469,7 @@ class PmBoardData
     ): Collection {
         return TimeEntry::query()
             ->whereIn('project_id', $projects->modelKeys())
-            ->whereBetween('started_at', [$rangeStart, $rangeEnd])
+            ->whereBetween('started_at', [$rangeStart->utc(), $rangeEnd->utc()])
             ->selectRaw('project_id, SUM(duration_seconds) as aggregate_seconds')
             ->groupBy('project_id')
             ->pluck('aggregate_seconds', 'project_id')

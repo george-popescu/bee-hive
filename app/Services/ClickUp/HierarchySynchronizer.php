@@ -85,9 +85,12 @@ final class HierarchySynchronizer
 
         $folder = ClickUpFolder::query()->firstOrNew(['clickup_folder_id' => $id]);
         $isInternal = in_array($id, $this->internalFolderIds, true);
+        $explicitProject = $projects->first(
+            fn (Project $project): bool => ClickUpValue::stringId($project->clickup_folder_id) === $id,
+        );
         $projectId = $isInternal
             ? null
-            : ($folder->project_id ?? $this->matchingProject($name, $projects)?->getKey());
+            : ($explicitProject?->getKey() ?? $folder->project_id);
 
         $folder->fill([
             'clickup_space_id' => $this->projectsSpaceId,
@@ -114,7 +117,9 @@ final class HierarchySynchronizer
         }
 
         $list = ClickUpList::query()->firstOrNew(['clickup_list_id' => $id]);
-        $projectId = $folder?->kind === ClickUpLocationKind::Internal ? null : $list->project_id;
+        $projectId = $folder === null
+            ? $list->project_id
+            : ($folder->kind === ClickUpLocationKind::Internal ? null : $folder->project_id);
         $list->fill([
             'click_up_folder_id' => $folder?->getKey(),
             'project_id' => $projectId,
@@ -125,34 +130,6 @@ final class HierarchySynchronizer
         ])->save();
 
         return $list;
-    }
-
-    /** @param Collection<int, Project> $projects */
-    private function matchingProject(string $folderName, Collection $projects): ?Project
-    {
-        preg_match_all('/\[([^]]+)]/', $folderName, $matches);
-        $labels = $matches[1];
-
-        if (count($labels) >= 2) {
-            $client = ClickUpValue::normalizedName($labels[0]);
-            $project = ClickUpValue::normalizedName($labels[1]);
-            $exact = $projects->filter(fn (Project $candidate): bool => ClickUpValue::normalizedName($candidate->client) === $client
-                && ClickUpValue::normalizedName($candidate->name) === $project
-            );
-
-            if ($exact->count() === 1) {
-                return $exact->first();
-            }
-
-            return null;
-        }
-
-        $projectName = ClickUpValue::normalizedName($labels[0] ?? $folderName);
-        $byUniqueName = $projects->filter(
-            fn (Project $candidate): bool => ClickUpValue::normalizedName($candidate->name) === $projectName,
-        );
-
-        return $byUniqueName->count() === 1 ? $byUniqueName->first() : null;
     }
 
     /**
