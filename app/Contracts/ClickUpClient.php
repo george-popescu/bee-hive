@@ -15,8 +15,8 @@ interface ClickUpClient
     /** @return list<array<string, mixed>> */
     public function folderlessLists(): array;
 
-    /** @return list<array<string, mixed>> */
-    public function tasks(?CarbonInterface $updatedAfter = null): array;
+    /** @return iterable<array<string, mixed>> */
+    public function tasks(?CarbonInterface $updatedAfter = null): iterable;
 
     /**
      * @param  list<string>  $assigneeIds
@@ -24,6 +24,6 @@ interface ClickUpClient
      */
     public function timeEntries(CarbonInterface $from, CarbonInterface $to, array $assigneeIds): array;
 
-    /** @return list<array<string, mixed>> */
-    public function timeOffTasks(): array;
+    /** @return iterable<array<string, mixed>> */
+    public function timeOffTasks(): iterable;
 }

@@ -49,9 +49,9 @@ it('sends only get requests with the raw authorization token', function () {
     $client->members();
     $client->folders();
     $client->folderlessLists();
-    $client->tasks();
+    iterator_to_array($client->tasks());
     $client->timeEntries($from, $to, ['user-1']);
-    $client->timeOffTasks();
+    iterator_to_array($client->timeOffTasks());
 
     $requests = Http::recorded()->map(fn (array $recorded) => $recorded[0]);
 
@@ -73,7 +73,11 @@ it('requests another task page when the current page contains 100 results', func
         ->push(['tasks' => [['id' => 'task-101']]]);
 
     $updatedAfter = CarbonImmutable::parse('2026-07-01T12:30:00Z');
-    $tasks = makeHttpClickUpClient()->tasks($updatedAfter);
+    $taskStream = makeHttpClickUpClient()->tasks($updatedAfter);
+
+    expect(Http::recorded())->toHaveCount(0);
+
+    $tasks = iterator_to_array($taskStream);
     $requests = Http::recorded()->map(fn (array $recorded) => $recorded[0])->values();
 
     expect($tasks)->toHaveCount(101)

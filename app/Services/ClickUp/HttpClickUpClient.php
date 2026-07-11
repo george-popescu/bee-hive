@@ -66,7 +66,8 @@ final class HttpClickUpClient implements ClickUpClient
         );
     }
 
-    public function tasks(?CarbonInterface $updatedAfter = null): array
+    /** @return iterable<array<string, mixed>> */
+    public function tasks(?CarbonInterface $updatedAfter = null): iterable
     {
         $query = [
             'space_ids[]' => $this->projectsSpaceId,
@@ -99,7 +100,8 @@ final class HttpClickUpClient implements ClickUpClient
         return $this->records($response, 'data', 'time-entry snapshot');
     }
 
-    public function timeOffTasks(): array
+    /** @return iterable<array<string, mixed>> */
+    public function timeOffTasks(): iterable
     {
         return $this->paginatedTasks("/list/{$this->holidaysListId}/task", [
             'include_closed' => 'true',
@@ -109,20 +111,20 @@ final class HttpClickUpClient implements ClickUpClient
 
     /**
      * @param  array<string, string|int>  $query
-     * @return list<array<string, mixed>>
+     * @return iterable<array<string, mixed>>
      */
-    private function paginatedTasks(string $path, array $query): array
+    private function paginatedTasks(string $path, array $query): iterable
     {
-        $tasks = [];
-
         for ($page = 0; $page < 100; $page++) {
             $response = $this->get($path, [...$query, 'page' => $page]);
             $pageTasks = $this->records($response, 'tasks', "task page {$page}");
 
-            $tasks = [...$tasks, ...$pageTasks];
+            foreach ($pageTasks as $task) {
+                yield $task;
+            }
 
             if (($response['last_page'] ?? false) === true || count($pageTasks) < 100) {
-                return $tasks;
+                return;
             }
         }
 

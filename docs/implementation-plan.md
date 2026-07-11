@@ -120,7 +120,7 @@ O sincronizare repetată este idempotentă, nu produce duplicate și nu șterge 
 - Finalizat: istoric pentru rulări, intervale, contoare și erori; comandă `clickup:sync`, job unic cu retry/timeout și programare orară cu protecție la overlap.
 - Validare automată completă: ESLint, Prettier, TypeScript, Pint, PHPStan și 81 de teste cu 336 de aserțiuni.
 - Validare live: 25 membri, 20 foldere și 67 liste citite; 59 taskuri modificate în ultima zi și 1.761 înregistrări de concediu sincronizate. Cele 285 de alocări M1 au rămas neschimbate.
-- Limitare operațională rămasă: tokenul curent nu poate citi pontajele celorlalți membri (`TIMEENTRY_059`). Fluxul este implementat și testat cu fixture-uri, dar validarea live a pontajelor necesită un token de Workspace Owner/Admin cu acces la time entries.
+- Validat live la 11 iulie 2026: tokenul configurat poate citi pontajele întregului workspace; sincronizarea read-only completă a reușit fără `TIMEENTRY_059`.
 
 ---
 
@@ -152,7 +152,7 @@ Ecranul reproduce prezentarea și valorile capturii „Plan vs Realizat” pe ac
 - Implementat: ajustări append-only cu motiv, autor, validare de perioadă, permisiune și scope; dialogul permite și adăugarea unei perechi fără pontaje existente.
 - Implementat: pagină Inertia, componente shadcn, navigație condiționată de permisiune și rute TypeScript generate cu Wayfinder.
 - Verificat: testele feature acoperă agregarea, intern/extern, permisiunile și validările; build-ul, TypeScript, ESLint, PHPStan și QA-ul în browser pentru toate modurile și dialog trec fără erori în consolă.
-- Limitare operațională izolată: valorile live din „Realizat” vor apărea după înlocuirea tokenului ClickUp cu unul care poate citi pontajele tuturor membrilor; fixture-urile și ajustările funcționează independent.
+- Validat live: valorile „Realizat” sunt alimentate de pontajele sincronizate pentru întregul workspace; ajustările rămân separate și append-only.
 
 ---
 
@@ -207,7 +207,7 @@ Boardul reproduce comportamentul T&M agreat și valorile ClickUp pentru perioada
 - Finalizat: progres total pe baza tuturor pontajelor taskului, orele perioadei agregate separat și semnalizarea depășirii peste 110%.
 - Finalizat: refresh ClickUp pus în coadă prin endpoint autorizat, fără write-back în ClickUp.
 - Verificat: 114 teste / 771 aserțiuni, PHPStan, Pint, Prettier, ESLint, TypeScript, build și QA în browser pe proiectul de referință „La Depozit”, inclusiv săptămână/lună și fără erori în consolă.
-- Limitare operațională izolată: structura și taskurile live sunt vizibile; pontajele tuturor membrilor vor fi validate live după obținerea tokenului ClickUp cu acces complet la time entries.
+- Validat live: structura, taskurile și pontajele tuturor membrilor sunt disponibile boardurilor PM prin sincronizarea read-only.
 
 ---
 
@@ -268,9 +268,9 @@ Aplicația este pregătită pentru utilizare internă în producție, cu permisi
 - Finalizat: jurnal de audit pentru alocări lunare, planificări săptămânale și schimbările administrative, cu actor, subiect și valorile înainte/după.
 - Finalizat: backup PostgreSQL zilnic în format custom, retenție configurabilă, scheduler, permisiuni restrictive și runbook pentru deploy, restore, rollback și procesele de producție.
 - Hardening: autorizare server-side pe fiecare endpoint, validări stricte, throttling pentru mutațiile administrative, optimistic locking pentru planificarea PM și păstrarea append-only a ajustărilor de realizat.
-- Verificat: 148 teste / 1.166 aserțiuni, PHPStan, Pint, Prettier, ESLint, TypeScript, build, rute, scheduler, migrații și toate secțiunile Administrare în browser, fără erori în consolă.
+- Verificat: 148 teste / 1.167 aserțiuni, PHPStan, Pint, Prettier, ESLint, TypeScript, build, rute, scheduler, migrații și toate secțiunile Administrare în browser, fără erori în consolă.
 - Precondiție de mediu: serverul de producție trebuie să aibă PostgreSQL client sau `PG_DUMP_BINARY` configurat; stația locală actuală nu are încă binarul `pg_dump`.
-- Validare externă rămasă: sincronizarea live a pontajelor va fi reverificată după obținerea unui token ClickUp cu acces la întregul workspace; integrarea rămâne read-only.
+- Validare live finală: 25 membri, 20 foldere, 67 liste, 2.928 taskuri, 1.761 înregistrări de concediu și 119 pontaje sincronizate pentru intervalul 1 iunie–11 iulie 2026; integrarea rămâne strict read-only.
 
 ---
 
