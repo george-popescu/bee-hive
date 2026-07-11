@@ -1,15 +1,12 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
-    BookOpen,
     ChartNoAxesCombined,
     ClipboardList,
-    FolderGit2,
-    LayoutGrid,
+    House,
     Settings2,
     UsersRound,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -28,11 +25,11 @@ import { index as pmBoardIndex } from '@/routes/pm_board';
 import { index as teamLeadIndex } from '@/routes/team_lead';
 import type { NavItem } from '@/types';
 
-const mainNavItems: Array<NavItem & { permissions?: string[] }> = [
+const workspaceNavItems: Array<NavItem & { permissions?: string[] }> = [
     {
-        title: 'Dashboard',
+        title: 'Acasă',
         href: dashboard(),
-        icon: LayoutGrid,
+        icon: House,
     },
     {
         title: 'Utilizare echipă',
@@ -52,6 +49,9 @@ const mainNavItems: Array<NavItem & { permissions?: string[] }> = [
         icon: ClipboardList,
         permissions: ['pm-boards.view'],
     },
+];
+
+const systemNavItems: Array<NavItem & { permissions?: string[] }> = [
     {
         title: 'Administrare',
         href: adminIndex(),
@@ -64,28 +64,18 @@ const mainNavItems: Array<NavItem & { permissions?: string[] }> = [
     },
 ];
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: FolderGit2,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
-        icon: BookOpen,
-    },
-];
-
 export function AppSidebar() {
     const { auth } = usePage().props;
-    const visibleNavItems = mainNavItems.filter(
-        (item) =>
-            !item.permissions ||
-            item.permissions.some((permission) =>
-                auth.permissions.includes(permission),
-            ),
-    );
+    const visibleItems = (items: Array<NavItem & { permissions?: string[] }>) =>
+        items.filter(
+            (item) =>
+                !item.permissions ||
+                item.permissions.some((permission) =>
+                    auth.permissions.includes(permission),
+                ),
+        );
+    const visibleWorkspaceItems = visibleItems(workspaceNavItems);
+    const visibleSystemItems = visibleItems(systemNavItems);
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -102,11 +92,13 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={visibleNavItems} />
+                <NavMain items={visibleWorkspaceItems} />
+                {visibleSystemItems.length > 0 && (
+                    <NavMain items={visibleSystemItems} label="Sistem" />
+                )}
             </SidebarContent>
 
             <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

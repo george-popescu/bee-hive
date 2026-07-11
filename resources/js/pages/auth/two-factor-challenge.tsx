@@ -23,18 +23,18 @@ export default function TwoFactorChallenge() {
     }>(() => {
         if (showRecoveryInput) {
             return {
-                title: 'Recovery code',
+                title: 'Cod de recuperare',
                 description:
-                    'Please confirm access to your account by entering one of your emergency recovery codes.',
-                toggleText: 'login using an authentication code',
+                    'Confirmă accesul folosind unul dintre codurile tale de recuperare.',
+                toggleText: 'folosește un cod de autentificare',
             };
         }
 
         return {
-            title: 'Authentication code',
+            title: 'Cod de autentificare',
             description:
-                'Enter the authentication code provided by your authenticator application.',
-            toggleText: 'login using a recovery code',
+                'Introdu codul generat de aplicația ta de autentificare.',
+            toggleText: 'folosește un cod de recuperare',
         };
     }, [showRecoveryInput]);
 
@@ -51,12 +51,12 @@ export default function TwoFactorChallenge() {
 
     return (
         <>
-            <Head title="Two-factor authentication" />
+            <Head title="Autentificare în doi pași" />
 
-            <div className="space-y-6">
+            <div className="flex flex-col gap-6">
                 <Form
                     {...store.form()}
-                    className="space-y-4"
+                    className="flex flex-col gap-4"
                     resetOnError
                     resetOnSuccess={!showRecoveryInput}
                 >
@@ -67,7 +67,7 @@ export default function TwoFactorChallenge() {
                                     <Input
                                         name="recovery_code"
                                         type="text"
-                                        placeholder="Enter recovery code"
+                                        placeholder="Introdu codul de recuperare"
                                         autoFocus={showRecoveryInput}
                                         required
                                     />
@@ -109,11 +109,11 @@ export default function TwoFactorChallenge() {
                                 className="w-full"
                                 disabled={processing}
                             >
-                                Continue
+                                Continuă
                             </Button>
 
                             <div className="text-center text-sm text-muted-foreground">
-                                <span>or you can </span>
+                                <span>Alternativ, poți </span>
                                 <button
                                     type="button"
                                     className="cursor-pointer text-foreground underline decoration-neutral-300 underline-offset-4 transition-colors duration-300 ease-out hover:decoration-current! dark:decoration-neutral-500"

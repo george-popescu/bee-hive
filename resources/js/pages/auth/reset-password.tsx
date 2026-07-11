@@ -16,7 +16,7 @@ type Props = {
 export default function ResetPassword({ token, email, passwordRules }: Props) {
     return (
         <>
-            <Head title="Reset password" />
+            <Head title="Resetare parolă" />
 
             <Form
                 {...update.form()}
@@ -26,7 +26,7 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                 {({ processing, errors }) => (
                     <div className="grid gap-6">
                         <div className="grid gap-2">
-                            <Label htmlFor="email">Email</Label>
+                            <Label htmlFor="email">Adresă de email</Label>
                             <Input
                                 id="email"
                                 type="email"
@@ -43,14 +43,14 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                         </div>
 
                         <div className="grid gap-2">
-                            <Label htmlFor="password">Password</Label>
+                            <Label htmlFor="password">Parolă nouă</Label>
                             <PasswordInput
                                 id="password"
                                 name="password"
                                 autoComplete="new-password"
                                 className="mt-1 block w-full"
                                 autoFocus
-                                placeholder="Password"
+                                placeholder="Parolă nouă"
                                 passwordrules={passwordRules}
                             />
                             <InputError message={errors.password} />
@@ -58,14 +58,14 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
 
                         <div className="grid gap-2">
                             <Label htmlFor="password_confirmation">
-                                Confirm password
+                                Confirmă parola
                             </Label>
                             <PasswordInput
                                 id="password_confirmation"
                                 name="password_confirmation"
                                 autoComplete="new-password"
                                 className="mt-1 block w-full"
-                                placeholder="Confirm password"
+                                placeholder="Confirmă parola"
                                 passwordrules={passwordRules}
                             />
                             <InputError
@@ -80,8 +80,8 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                             disabled={processing}
                             data-test="reset-password-button"
                         >
-                            {processing && <Spinner />}
-                            Reset password
+                            {processing && <Spinner data-icon="inline-start" />}
+                            Salvează parola
                         </Button>
                     </div>
                 )}
@@ -91,6 +91,6 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
 }
 
 ResetPassword.layout = {
-    title: 'Reset password',
-    description: 'Please enter your new password below',
+    title: 'Setează o parolă nouă',
+    description: 'Alege o parolă sigură pentru contul tău Hive.',
 };
