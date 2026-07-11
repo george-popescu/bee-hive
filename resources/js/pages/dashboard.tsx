@@ -89,7 +89,7 @@ export default function Dashboard() {
                     <div className="pointer-events-none absolute -top-24 -right-20 size-72 rounded-full bg-primary/5 blur-3xl" />
                     <div className="relative flex max-w-3xl flex-col gap-4">
                         <Badge variant="outline" className="w-fit">
-                            BEE CODED HIVE
+                            BEE CODED HiveOps
                         </Badge>
                         <div className="flex flex-col gap-2">
                             <h1 className="text-3xl font-semibold tracking-tight">
@@ -163,7 +163,8 @@ export default function Dashboard() {
                             <CardTitle>Acces în curs de configurare</CardTitle>
                             <CardDescription>
                                 Contul tău este activ, dar nu are încă un rol
-                                operațional. Contactează administratorul Hive.
+                                operațional. Contactează administratorul
+                                HiveOps.
                             </CardDescription>
                         </CardHeader>
                     </Card>

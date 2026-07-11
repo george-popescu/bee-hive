@@ -92,7 +92,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                 {processing && (
                                     <Spinner data-icon="inline-start" />
                                 )}
-                                Intră în Hive
+                                Intră în HiveOps
                             </Button>
                         </div>
                     </>
@@ -111,5 +111,5 @@ export default function Login({ status, canResetPassword }: Props) {
 Login.layout = {
     title: 'Bine ai revenit',
     description:
-        'Autentifică-te cu contul intern pentru a continua în BEE CODED HIVE.',
+        'Autentifică-te cu contul intern pentru a continua în BEE CODED HiveOps.',
 };

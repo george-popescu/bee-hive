@@ -45,10 +45,10 @@ export default function AuthSimpleLayout({
                         </span>
                         <span className="flex flex-col">
                             <span className="text-sm font-semibold tracking-wide">
-                                BEE CODED HIVE
+                                BEE CODED HiveOps
                             </span>
                             <span className="text-xs text-muted-foreground">
-                                Capacity & Delivery
+                                Capacity, Allocation & Delivery
                             </span>
                         </span>
                     </Link>
@@ -62,7 +62,7 @@ export default function AuthSimpleLayout({
                                 Planificarea echipei, conectată la livrare.
                             </h2>
                             <p className="max-w-lg text-base leading-7 text-pretty text-muted-foreground">
-                                Intră în Hive pentru capacitate, alocări,
+                                Intră în HiveOps pentru capacitate, alocări,
                                 utilizare și board-uri PM alimentate din
                                 ClickUp.
                             </p>
@@ -107,7 +107,7 @@ export default function AuthSimpleLayout({
                             <AppLogoIcon className="size-6 fill-current" />
                         </span>
                         <span className="text-sm font-semibold tracking-wide">
-                            BEE CODED HIVE
+                            BEE CODED HiveOps
                         </span>
                     </Link>
 
@@ -125,7 +125,7 @@ export default function AuthSimpleLayout({
 
                     <p className="text-xs leading-5 text-muted-foreground">
                         Accesul este disponibil exclusiv utilizatorilor
-                        autorizați de administratorul Hive.
+                        autorizați de administratorul HiveOps.
                     </p>
                 </div>
             </main>

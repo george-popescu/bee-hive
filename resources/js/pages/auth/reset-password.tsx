@@ -92,5 +92,5 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
 
 ResetPassword.layout = {
     title: 'Setează o parolă nouă',
-    description: 'Alege o parolă sigură pentru contul tău Hive.',
+    description: 'Alege o parolă sigură pentru contul tău HiveOps.',
 };

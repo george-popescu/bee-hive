@@ -63,10 +63,10 @@ export default function Welcome() {
                             </span>
                             <span className="flex flex-col">
                                 <span className="text-sm font-semibold tracking-wide">
-                                    BEE CODED HIVE
+                                    BEE CODED HiveOps
                                 </span>
                                 <span className="text-xs text-muted-foreground">
-                                    Capacity & Delivery
+                                    Capacity, Allocation & Delivery
                                 </span>
                             </span>
                         </Link>
@@ -97,7 +97,7 @@ export default function Welcome() {
                                     livrăm.
                                 </h1>
                                 <p className="max-w-2xl text-lg leading-8 text-pretty text-muted-foreground">
-                                    Hive conectează planificarea echipei cu
+                                    HiveOps conectează planificarea echipei cu
                                     activitatea reală din ClickUp, fără să
                                     schimbe datele sursă și fără foi de calcul
                                     paralele.
@@ -232,7 +232,7 @@ export default function Welcome() {
 
                 <footer className="relative">
                     <div className="mx-auto flex max-w-7xl flex-col gap-2 px-6 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:px-8">
-                        <span>BEE CODED HIVE</span>
+                        <span>BEE CODED HiveOps</span>
                         <span>Capacitate · Alocare · Livrare</span>
                     </div>
                 </footer>

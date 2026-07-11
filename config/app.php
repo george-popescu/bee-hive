@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'BEE CODED HIVE'),
+    'name' => env('APP_NAME', 'BEE CODED HiveOps'),
 
     /*
     |--------------------------------------------------------------------------
