@@ -53,9 +53,8 @@ class PmBoardData
         [$rangeStart, $rangeEnd] = $this->range($anchor, $period);
         $periodSecondsByProject = $this->periodSecondsByProject($projects, $rangeStart, $rangeEnd);
         $projects = $this->orderProjectsByPeriodHours($projects, $periodSecondsByProject);
-        $selectedProject = $selectedProjectId === null
-            ? $projects->first()
-            : $projects->firstWhere('id', $selectedProjectId);
+        $allProjectsSelected = $selectedProjectId === null;
+        $selectedProject = $allProjectsSelected ? null : $projects->firstWhere('id', $selectedProjectId);
 
         if ($selectedProject instanceof Project && $selectedProject->contract_type === ProjectBoardTemplate::Deliverables) {
             $period = 'week';
@@ -63,9 +62,12 @@ class PmBoardData
             $periodSecondsByProject = $this->periodSecondsByProject($projects, $rangeStart, $rangeEnd);
             $projects = $this->orderProjectsByPeriodHours($projects, $periodSecondsByProject);
         }
+        $selectedProjects = $allProjectsSelected
+            ? $projects
+            : $projects->filter(fn (Project $project): bool => $project->is($selectedProject))->values();
         $sync = $this->syncStatus();
 
-        if (! $selectedProject instanceof Project) {
+        if ($selectedProjects->isEmpty()) {
             return [
                 'projects' => $projects->map(fn (Project $project): array => $this->projectData($project, $periodSecondsByProject))->all(),
                 'managers' => $managers->map(fn (Person $person): array => [
@@ -73,6 +75,7 @@ class PmBoardData
                     'name' => $person->name,
                 ])->all(),
                 'selectedPmId' => $pmId,
+                'allProjectsSelected' => $allProjectsSelected,
                 'selectedProject' => null,
                 'period' => $this->periodData($period, $anchor, $rangeStart, $rangeEnd),
                 'workedTasks' => [],
@@ -98,7 +101,7 @@ class PmBoardData
 
         $taskIdsWithEntries = TimeEntry::query()
             ->select('click_up_task_id')
-            ->whereBelongsTo($selectedProject)
+            ->whereIn('project_id', $selectedProjects->modelKeys())
             ->whereNotNull('click_up_task_id')
             ->whereBetween('started_at', [$rangeStart, $rangeEnd]);
         $tasks = ClickUpTask::query()
@@ -114,11 +117,11 @@ class PmBoardData
                 'due_at',
                 'active',
             ])
-            ->whereBelongsTo($selectedProject)
+            ->whereIn('project_id', $selectedProjects->modelKeys())
             ->where(fn ($query) => $query
                 ->where('active', true)
                 ->orWhereIn('id', $taskIdsWithEntries))
-            ->with(['assignees:id,name'])
+            ->with(['assignees:id,name', 'project:id,client,name'])
             ->orderBy('name')
             ->get();
         $taskIds = $tasks->modelKeys();
@@ -143,19 +146,23 @@ class PmBoardData
             ->filter(fn (array $task): bool => $task['periodHours'] > 0)
             ->sortByDesc('periodHours')
             ->values();
-        $excludedTaskIds = $this->excludedTaskIds($selectedProject);
+        $excludedTaskIds = $selectedProjects
+            ->filter(fn (Project $project): bool => $project->contract_type === ProjectBoardTemplate::Deliverables)
+            ->flatMap(fn (Project $project): array => $this->excludedTaskIds($project))
+            ->all();
         $upcomingTasks = $taskRows
             ->filter(fn (array $task): bool => $task['active'] && ! $task['isDone'])
             ->sortBy(fn (array $task): string => $task['statusGroup'].'|'.($task['dueDate'] ?? '9999-12-31').'|'.$task['name'])
             ->values();
 
-        if ($selectedProject->contract_type === ProjectBoardTemplate::Deliverables) {
+        if ($excludedTaskIds !== []) {
             $upcomingTasks = $upcomingTasks
                 ->reject(fn (array $task): bool => in_array($task['clickupId'], $excludedTaskIds, true))
                 ->values();
         }
         $peopleWorked = $this->peopleWorked($periodEntryRows);
-        $isDeliverables = $selectedProject->contract_type === ProjectBoardTemplate::Deliverables;
+        $isDeliverables = $selectedProject instanceof Project
+            && $selectedProject->contract_type === ProjectBoardTemplate::Deliverables;
         $planning = $isDeliverables
             ? $this->planningData($selectedProject, $upcomingTasks, $rangeEnd->addDay()->startOfDay())
             : null;
@@ -170,7 +177,10 @@ class PmBoardData
                 'name' => $person->name,
             ])->all(),
             'selectedPmId' => $pmId,
-            'selectedProject' => $this->projectData($selectedProject, $periodSecondsByProject),
+            'allProjectsSelected' => $allProjectsSelected,
+            'selectedProject' => $selectedProject instanceof Project
+                ? $this->projectData($selectedProject, $periodSecondsByProject)
+                : null,
             'period' => $this->periodData($period, $anchor, $rangeStart, $rangeEnd),
             'workedTasks' => $workedTasks->all(),
             'upcomingTasks' => $upcomingTasks->all(),
@@ -233,6 +243,7 @@ class PmBoardData
             'id' => $task->getKey(),
             'clickupId' => $task->clickup_task_id,
             'name' => $task->name,
+            'projectLabel' => $task->project instanceof Project ? $this->projectLabel($task->project) : 'Fără proiect',
             'url' => "https://app.clickup.com/t/{$task->clickup_task_id}",
             'status' => $status === '' ? 'fără status' : $status,
             'statusGroup' => $statusGroup,

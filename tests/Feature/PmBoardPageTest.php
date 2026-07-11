@@ -253,6 +253,57 @@ it('orders projects by worked hours in the selected range', function () {
             ->where('projects.3.id', $zeroHours->id));
 });
 
+it('aggregates every visible project when no individual project is selected', function () {
+    $user = globalPmBoardViewer();
+    $person = Person::factory()->create(['name' => 'Ana']);
+    $firstProject = Project::factory()->create(['client' => 'Acme', 'name' => 'Portal']);
+    $secondProject = Project::factory()->create(['client' => 'Beta', 'name' => 'Mobile']);
+    $firstTask = ClickUpTask::factory()->create([
+        'project_id' => $firstProject,
+        'name' => 'Task Acme',
+        'status' => 'in progress',
+    ]);
+    $secondTask = ClickUpTask::factory()->create([
+        'project_id' => $secondProject,
+        'name' => 'Task Beta',
+        'status' => 'to do',
+    ]);
+
+    foreach ([[$firstProject, $firstTask, 2], [$secondProject, $secondTask, 3]] as [$project, $task, $hours]) {
+        TimeEntry::factory()->create([
+            'project_id' => $project,
+            'click_up_task_id' => $task,
+            'person_id' => $person,
+            'started_at' => '2026-07-08 10:00:00',
+            'duration_seconds' => $hours * 3600,
+        ]);
+    }
+
+    $this->actingAs($user)
+        ->get(route('pm_board.index', [
+            'period' => 'week',
+            'anchor' => '2026-07-08',
+        ]))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('allProjectsSelected', true)
+            ->where('selectedProject', null)
+            ->has('projects', 2)
+            ->has('workedTasks', 2)
+            ->where('workedTasks.0.projectLabel', 'Beta — Mobile')
+            ->where('workedTasks.0.periodHours', 3)
+            ->where('workedTasks.1.projectLabel', 'Acme — Portal')
+            ->where('workedTasks.1.periodHours', 2)
+            ->has('upcomingTasks', 2)
+            ->where('peopleWorked.0', ['name' => 'Ana', 'hours' => 5, 'tasks' => 2])
+            ->where('planning', null)
+            ->where('gantt', null)
+            ->where('kpis.actualHours', 5)
+            ->where('kpis.workedTasks', 2)
+            ->where('kpis.activePeople', 1)
+            ->where('kpis.projects', 2));
+});
+
 it('keeps contributors with the same display name separate by stable identity', function () {
     $user = globalPmBoardViewer();
     $project = Project::factory()->create();

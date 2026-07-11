@@ -30,6 +30,7 @@ import {
     SelectGroup,
     SelectItem,
     SelectLabel,
+    SelectSeparator,
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
@@ -66,6 +67,7 @@ type BoardTask = {
     id: number;
     clickupId: string;
     name: string;
+    projectLabel: string;
     url: string;
     status: string;
     isDone: boolean;
@@ -132,6 +134,7 @@ type Props = {
     projects: Project[];
     managers: Array<{ id: number; name: string }>;
     selectedPmId: number | null;
+    allProjectsSelected: boolean;
     selectedProject: Project | null;
     period: Period;
     workedTasks: BoardTask[];
@@ -455,6 +458,7 @@ export default function PmBoard({
     projects,
     managers,
     selectedPmId,
+    allProjectsSelected,
     selectedProject,
     period,
     workedTasks,
@@ -471,6 +475,10 @@ export default function PmBoard({
         'presentation',
     );
     const currentProjectId = selectedProject?.id ?? null;
+    const allPeriodHours = projects.reduce(
+        (total, project) => total + project.periodHours,
+        0,
+    );
     const isDeliverables = selectedProject?.template === 'deliverables';
     const activeSection = isDeliverables
         ? section === 'summary' || section === 'people'
@@ -560,11 +568,12 @@ export default function PmBoard({
                             <ToggleGroupItem value="presentation">
                                 Prezentare
                             </ToggleGroupItem>
-                            {permissions.managePlanning && (
-                                <ToggleGroupItem value="edit">
-                                    Editare
-                                </ToggleGroupItem>
-                            )}
+                            {permissions.managePlanning &&
+                                !allProjectsSelected && (
+                                    <ToggleGroupItem value="edit">
+                                        Editare
+                                    </ToggleGroupItem>
+                                )}
                         </ToggleGroup>
                         {permissions.syncClickUp && (
                             <Button
@@ -589,8 +598,14 @@ export default function PmBoard({
                     <div className="grid w-full gap-2 sm:max-w-md">
                         <Label htmlFor="project-selector">Proiect</Label>
                         <Select
-                            value={currentProjectId?.toString()}
-                            onValueChange={(value) => navigate(Number(value))}
+                            value={
+                                allProjectsSelected
+                                    ? 'all'
+                                    : currentProjectId?.toString()
+                            }
+                            onValueChange={(value) =>
+                                navigate(value === 'all' ? null : Number(value))
+                            }
                         >
                             <SelectTrigger
                                 id="project-selector"
@@ -599,6 +614,14 @@ export default function PmBoard({
                                 <SelectValue placeholder="Alege un proiect" />
                             </SelectTrigger>
                             <SelectContent align="start">
+                                <SelectGroup>
+                                    <SelectLabel>Vedere</SelectLabel>
+                                    <SelectItem value="all">
+                                        Toate proiectele ·{' '}
+                                        {hours(allPeriodHours)}
+                                    </SelectItem>
+                                </SelectGroup>
+                                <SelectSeparator />
                                 <SelectGroup>
                                     <SelectLabel>
                                         Proiecte disponibile
@@ -619,7 +642,7 @@ export default function PmBoard({
                     </div>
                 )}
 
-                {selectedProject === null ? (
+                {projects.length === 0 ? (
                     <Card>
                         <CardHeader>
                             <CardTitle>Niciun proiect disponibil</CardTitle>
@@ -636,16 +659,21 @@ export default function PmBoard({
                                 <div>
                                     <div className="flex flex-wrap items-center gap-2">
                                         <h2 className="text-xl font-semibold">
-                                            {selectedProject.label}
+                                            {allProjectsSelected
+                                                ? 'Toate proiectele'
+                                                : selectedProject?.label}
                                         </h2>
                                         <Badge variant="outline">
-                                            {selectedProject.templateLabel}
+                                            {allProjectsSelected
+                                                ? `${projects.length} proiecte`
+                                                : selectedProject?.templateLabel}
                                         </Badge>
-                                        {displayMode === 'edit' && (
-                                            <Badge variant="warning">
-                                                Mod editare
-                                            </Badge>
-                                        )}
+                                        {displayMode === 'edit' &&
+                                            !allProjectsSelected && (
+                                                <Badge variant="warning">
+                                                    Mod editare
+                                                </Badge>
+                                            )}
                                     </div>
                                     <p className="mt-1 text-sm text-muted-foreground">
                                         {sync?.status === 'failed'
@@ -818,14 +846,21 @@ export default function PmBoard({
                                                 key={task.id}
                                                 className="flex items-center justify-between gap-3 border-b pb-3 last:border-0 last:pb-0"
                                             >
-                                                <a
-                                                    href={task.url}
-                                                    target="_blank"
-                                                    rel="noreferrer"
-                                                    className="line-clamp-1 font-medium hover:underline"
-                                                >
-                                                    {task.name}
-                                                </a>
+                                                <div className="min-w-0">
+                                                    <a
+                                                        href={task.url}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="line-clamp-1 font-medium hover:underline"
+                                                    >
+                                                        {task.name}
+                                                    </a>
+                                                    {allProjectsSelected && (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            {task.projectLabel}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <span className="shrink-0 tabular-nums">
                                                     {hours(task.periodHours)}
                                                 </span>
@@ -865,8 +900,10 @@ export default function PmBoard({
                                                             {task.name}
                                                         </a>
                                                         <span className="text-xs text-muted-foreground">
-                                                            {task.dueDate ??
-                                                                'fără termen'}
+                                                            {allProjectsSelected
+                                                                ? `${task.projectLabel} · ${task.dueDate ?? 'fără termen'}`
+                                                                : (task.dueDate ??
+                                                                  'fără termen')}
                                                         </span>
                                                     </div>
                                                     <TaskStatus task={task} />
@@ -914,15 +951,24 @@ export default function PmBoard({
                                             {workedTasks.map((task) => (
                                                 <TableRow key={task.id}>
                                                     <TableCell>
-                                                        <a
-                                                            href={task.url}
-                                                            target="_blank"
-                                                            rel="noreferrer"
-                                                            className="inline-flex items-center gap-1 font-medium hover:underline"
-                                                        >
-                                                            {task.name}
-                                                            <ExternalLink className="size-3" />
-                                                        </a>
+                                                        <div className="flex flex-col gap-1">
+                                                            <a
+                                                                href={task.url}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="inline-flex items-center gap-1 font-medium hover:underline"
+                                                            >
+                                                                {task.name}
+                                                                <ExternalLink className="size-3" />
+                                                            </a>
+                                                            {allProjectsSelected && (
+                                                                <span className="text-xs text-muted-foreground">
+                                                                    {
+                                                                        task.projectLabel
+                                                                    }
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </TableCell>
                                                     <TableCell>
                                                         <TaskStatus
@@ -999,7 +1045,9 @@ export default function PmBoard({
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {isDeliverables && planning
+                                            {isDeliverables &&
+                                            planning &&
+                                            selectedProject
                                                 ? upcomingTasks.map((task) => (
                                                       <DeliverableTaskRows
                                                           key={`${task.id}-${planning.plans.find((plan) => plan.taskId === task.id)?.updatedAt ?? 'new'}`}
@@ -1018,16 +1066,27 @@ export default function PmBoard({
                                                 : upcomingTasks.map((task) => (
                                                       <TableRow key={task.id}>
                                                           <TableCell>
-                                                              <a
-                                                                  href={
-                                                                      task.url
-                                                                  }
-                                                                  target="_blank"
-                                                                  rel="noreferrer"
-                                                                  className="font-medium hover:underline"
-                                                              >
-                                                                  {task.name}
-                                                              </a>
+                                                              <div className="flex flex-col gap-1">
+                                                                  <a
+                                                                      href={
+                                                                          task.url
+                                                                      }
+                                                                      target="_blank"
+                                                                      rel="noreferrer"
+                                                                      className="font-medium hover:underline"
+                                                                  >
+                                                                      {
+                                                                          task.name
+                                                                      }
+                                                                  </a>
+                                                                  {allProjectsSelected && (
+                                                                      <span className="text-xs text-muted-foreground">
+                                                                          {
+                                                                              task.projectLabel
+                                                                          }
+                                                                      </span>
+                                                                  )}
+                                                              </div>
                                                           </TableCell>
                                                           <TableCell>
                                                               {task.owners.join(
