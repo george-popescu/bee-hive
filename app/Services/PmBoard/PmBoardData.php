@@ -29,6 +29,7 @@ class PmBoardData
         ?int $pmId,
     ): array {
         $projectIds = $this->scope->projectIds($user);
+        $period = $period === 'month' ? 'month' : 'week';
 
         if ($selectedProjectId !== null && ! in_array($selectedProjectId, $projectIds, true)) {
             throw new AuthorizationException;
@@ -49,20 +50,24 @@ class PmBoardData
         $projects = $pmId === null
             ? $allProjects
             : $allProjects->filter(fn (Project $project): bool => $project->managers->contains('id', $pmId))->values();
+        [$rangeStart, $rangeEnd] = $this->range($anchor, $period);
+        $periodSecondsByProject = $this->periodSecondsByProject($projects, $rangeStart, $rangeEnd);
+        $projects = $this->orderProjectsByPeriodHours($projects, $periodSecondsByProject);
         $selectedProject = $selectedProjectId === null
             ? $projects->first()
             : $projects->firstWhere('id', $selectedProjectId);
-        $period = $period === 'month' ? 'month' : 'week';
 
         if ($selectedProject instanceof Project && $selectedProject->contract_type === ProjectBoardTemplate::Deliverables) {
             $period = 'week';
+            [$rangeStart, $rangeEnd] = $this->range($anchor, $period);
+            $periodSecondsByProject = $this->periodSecondsByProject($projects, $rangeStart, $rangeEnd);
+            $projects = $this->orderProjectsByPeriodHours($projects, $periodSecondsByProject);
         }
-        [$rangeStart, $rangeEnd] = $this->range($anchor, $period);
         $sync = $this->syncStatus();
 
         if (! $selectedProject instanceof Project) {
             return [
-                'projects' => $projects->map(fn (Project $project): array => $this->projectData($project))->all(),
+                'projects' => $projects->map(fn (Project $project): array => $this->projectData($project, $periodSecondsByProject))->all(),
                 'managers' => $managers->map(fn (Person $person): array => [
                     'id' => $person->getKey(),
                     'name' => $person->name,
@@ -159,13 +164,13 @@ class PmBoardData
             : null;
 
         return [
-            'projects' => $projects->map(fn (Project $project): array => $this->projectData($project))->all(),
+            'projects' => $projects->map(fn (Project $project): array => $this->projectData($project, $periodSecondsByProject))->all(),
             'managers' => $managers->map(fn (Person $person): array => [
                 'id' => $person->getKey(),
                 'name' => $person->name,
             ])->all(),
             'selectedPmId' => $pmId,
-            'selectedProject' => $this->projectData($selectedProject),
+            'selectedProject' => $this->projectData($selectedProject, $periodSecondsByProject),
             'period' => $this->periodData($period, $anchor, $rangeStart, $rangeEnd),
             'workedTasks' => $workedTasks->all(),
             'upcomingTasks' => $upcomingTasks->all(),
@@ -442,8 +447,50 @@ class PmBoardData
         return ['weeks' => $weeks->all(), 'rows' => $rows->all()];
     }
 
-    /** @return array{id: int, label: string, template: string, templateLabel: string, managerIds: list<int>} */
-    private function projectData(Project $project): array
+    /**
+     * @param  EloquentCollection<int, Project>  $projects
+     * @return Collection<int, int>
+     */
+    private function periodSecondsByProject(
+        EloquentCollection $projects,
+        CarbonImmutable $rangeStart,
+        CarbonImmutable $rangeEnd,
+    ): Collection {
+        return TimeEntry::query()
+            ->whereIn('project_id', $projects->modelKeys())
+            ->whereBetween('started_at', [$rangeStart, $rangeEnd])
+            ->selectRaw('project_id, SUM(duration_seconds) as aggregate_seconds')
+            ->groupBy('project_id')
+            ->pluck('aggregate_seconds', 'project_id')
+            ->map(fn (mixed $seconds): int => (int) $seconds);
+    }
+
+    /**
+     * @param  EloquentCollection<int, Project>  $projects
+     * @param  Collection<int, int>  $periodSecondsByProject
+     * @return EloquentCollection<int, Project>
+     */
+    private function orderProjectsByPeriodHours(
+        EloquentCollection $projects,
+        Collection $periodSecondsByProject,
+    ): EloquentCollection {
+        return $projects
+            ->sort(function (Project $first, Project $second) use ($periodSecondsByProject): int {
+                $hoursComparison = ((int) $periodSecondsByProject->get($second->getKey(), 0))
+                    <=> ((int) $periodSecondsByProject->get($first->getKey(), 0));
+
+                return $hoursComparison !== 0
+                    ? $hoursComparison
+                    : strnatcasecmp($this->projectLabel($first), $this->projectLabel($second));
+            })
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int, int>  $periodSecondsByProject
+     * @return array{id: int, label: string, template: string, templateLabel: string, managerIds: list<int>, periodHours: float}
+     */
+    private function projectData(Project $project, Collection $periodSecondsByProject): array
     {
         $template = $project->contract_type instanceof ProjectBoardTemplate
             ? $project->contract_type
@@ -451,11 +498,17 @@ class PmBoardData
 
         return [
             'id' => $project->getKey(),
-            'label' => trim($project->client.' — '.$project->name, ' —'),
+            'label' => $this->projectLabel($project),
             'template' => $template->value,
             'templateLabel' => $template->label(),
             'managerIds' => array_values($project->managers->pluck('id')->map(fn (mixed $id): int => (int) $id)->all()),
+            'periodHours' => round(((int) $periodSecondsByProject->get($project->getKey(), 0)) / 3600, 2),
         ];
+    }
+
+    private function projectLabel(Project $project): string
+    {
+        return trim($project->client.' — '.$project->name, ' —');
     }
 
     /** @return array<string, mixed>|null */

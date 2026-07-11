@@ -50,6 +50,7 @@ type Project = {
     template: 'tm' | 'deliverables';
     templateLabel: string;
     managerIds: number[];
+    periodHours: number;
 };
 type Period = {
     type: 'week' | 'month';
@@ -608,7 +609,8 @@ export default function PmBoard({
                                             value={project.id.toString()}
                                         >
                                             {project.label} —{' '}
-                                            {project.templateLabel}
+                                            {project.templateLabel} ·{' '}
+                                            {hours(project.periodHours)}
                                         </SelectItem>
                                     ))}
                                 </SelectGroup>

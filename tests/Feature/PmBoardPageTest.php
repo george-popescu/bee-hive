@@ -202,6 +202,57 @@ it('uses calendar month boundaries and month navigation', function () {
             ->where('workedTasks.0.periodHours', 2));
 });
 
+it('orders projects by worked hours in the selected range', function () {
+    $user = globalPmBoardViewer();
+    $zeroHours = Project::factory()->create(['client' => 'Alpha', 'name' => 'Zero']);
+    $twoHours = Project::factory()->create(['client' => 'Beta', 'name' => 'Two']);
+    $fiveHours = Project::factory()->create(['client' => 'Gamma', 'name' => 'Five']);
+    $laterHours = Project::factory()->create(['client' => 'Omega', 'name' => 'Later']);
+
+    foreach ([[$twoHours, 2], [$fiveHours, 5]] as [$project, $hours]) {
+        TimeEntry::factory()->create([
+            'project_id' => $project,
+            'started_at' => '2026-07-08 10:00:00',
+            'duration_seconds' => $hours * 3600,
+        ]);
+    }
+
+    TimeEntry::factory()->create([
+        'project_id' => $laterHours,
+        'started_at' => '2026-07-30 10:00:00',
+        'duration_seconds' => 10 * 3600,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('pm_board.index', [
+            'project' => $twoHours->id,
+            'period' => 'week',
+            'anchor' => '2026-07-08',
+        ]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('projects.0.id', $fiveHours->id)
+            ->where('projects.0.periodHours', 5)
+            ->where('projects.1.id', $twoHours->id)
+            ->where('projects.1.periodHours', 2)
+            ->where('projects.2.id', $zeroHours->id)
+            ->where('projects.2.periodHours', 0)
+            ->where('projects.3.id', $laterHours->id)
+            ->where('projects.3.periodHours', 0));
+
+    $this->actingAs($user)
+        ->get(route('pm_board.index', [
+            'project' => $twoHours->id,
+            'period' => 'month',
+            'anchor' => '2026-07-08',
+        ]))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('projects.0.id', $laterHours->id)
+            ->where('projects.0.periodHours', 10)
+            ->where('projects.1.id', $fiveHours->id)
+            ->where('projects.2.id', $twoHours->id)
+            ->where('projects.3.id', $zeroHours->id));
+});
+
 it('keeps contributors with the same display name separate by stable identity', function () {
     $user = globalPmBoardViewer();
     $project = Project::factory()->create();
