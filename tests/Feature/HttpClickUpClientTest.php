@@ -3,6 +3,7 @@
 use App\Services\ClickUp\HttpClickUpClient;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 
 function makeHttpClickUpClient(): HttpClickUpClient
@@ -93,6 +94,33 @@ it('requests another task page when the current page contains 100 results', func
             'page' => 0,
         ])
         ->and($requests[1]->data()['page'])->toBe(1);
+});
+
+it('retries transient connection failures before failing the synchronization', function () {
+    Http::fakeSequence()
+        ->pushFailedConnection('Temporary ClickUp connection failure')
+        ->pushFailedConnection('Temporary ClickUp connection failure')
+        ->push(['folders' => []]);
+
+    expect(makeHttpClickUpClient()->folders())->toBe([])
+        ->and(Http::recorded())->toHaveCount(3);
+});
+
+it('keeps retrying temporary ClickUp server responses', function () {
+    Http::fakeSequence()
+        ->push(['message' => 'Temporary server failure'], 503)
+        ->push(['folders' => []]);
+
+    expect(makeHttpClickUpClient()->folders())->toBe([])
+        ->and(Http::recorded())->toHaveCount(2);
+});
+
+it('does not retry ClickUp client errors', function () {
+    Http::fakeSequence()->push(['message' => 'Unauthorized'], 401);
+
+    expect(fn () => makeHttpClickUpClient()->folders())
+        ->toThrow(RequestException::class)
+        ->and(Http::recorded())->toHaveCount(1);
 });
 
 it('sends the expected query when requesting time entries', function () {

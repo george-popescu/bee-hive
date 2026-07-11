@@ -4,24 +4,35 @@ namespace App\Services\ClickUp;
 
 use App\Contracts\ClickUpClient;
 use Carbon\CarbonInterface;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
+use Throwable;
 
 final class HttpClickUpClient implements ClickUpClient
 {
+    /** @var list<int> */
+    private const CONNECTION_RETRY_DELAYS_MS = [250, 1_000, 2_500];
+
     public function __construct(
         private readonly string $token,
         private readonly string $workspaceId,
         private readonly string $projectsSpaceId,
         private readonly string $holidaysListId,
         private readonly string $baseUrl = 'https://api.clickup.com/api/v2',
+        private readonly int $requestTimeoutSeconds = 60,
+        private readonly int $connectTimeoutSeconds = 15,
     ) {
         foreach ([$this->token, $this->workspaceId, $this->projectsSpaceId, $this->holidaysListId] as $value) {
             if (trim($value) === '') {
                 throw new RuntimeException('ClickUp integration configuration is incomplete.');
             }
+        }
+
+        if ($this->requestTimeoutSeconds < 1 || $this->connectTimeoutSeconds < 1) {
+            throw new RuntimeException('ClickUp integration timeout configuration is invalid.');
         }
     }
 
@@ -169,7 +180,13 @@ final class HttpClickUpClient implements ClickUpClient
         return Http::baseUrl(rtrim($this->baseUrl, '/'))
             ->withHeaders(['Authorization' => $this->token])
             ->acceptJson()
-            ->timeout(30);
+            ->timeout($this->requestTimeoutSeconds)
+            ->connectTimeout($this->connectTimeoutSeconds)
+            ->retry(
+                self::CONNECTION_RETRY_DELAYS_MS,
+                when: fn (Throwable $exception): bool => $exception instanceof ConnectionException,
+                throw: false,
+            );
     }
 
     private function retryDelayMicroseconds(Response $response, int $attempt): int

@@ -27,6 +27,8 @@ class AppServiceProvider extends ServiceProvider
             projectsSpaceId: (string) config('services.clickup.projects_space_id'),
             holidaysListId: (string) config('services.clickup.holidays_list_id'),
             baseUrl: (string) config('services.clickup.base_url'),
+            requestTimeoutSeconds: (int) config('services.clickup.request_timeout_seconds'),
+            connectTimeoutSeconds: (int) config('services.clickup.connect_timeout_seconds'),
         ));
 
         $this->app->bind(HierarchySynchronizer::class, fn (): HierarchySynchronizer => new HierarchySynchronizer(
