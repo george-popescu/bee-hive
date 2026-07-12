@@ -25,13 +25,18 @@ test('guests are redirected to the login page', function () {
 
 test('authenticated users can visit the dashboard', function () {
     $user = User::factory()->create();
+    SyncRun::factory()->create([
+        'status' => SyncRunStatus::Failed,
+        'error_message' => 'Sensitive ClickUp error details',
+    ]);
     $this->actingAs($user);
 
     $response = $this->get(route('dashboard'));
     $response->assertOk()->assertInertia(fn (Assert $page) => $page
         ->component('dashboard')
         ->where('dashboard.scope.mode', 'empty')
-        ->where('dashboard.kpis.people', 0));
+        ->where('dashboard.kpis.people', 0)
+        ->where('dashboard.sync', null));
 });
 
 it('builds an executive company overview from the active month', function () {
@@ -40,6 +45,10 @@ it('builds an executive company overview from the active month', function () {
     $user->givePermissionTo(PermissionName::ViewManagement->value);
     $person = Person::factory()->create([
         'name' => 'Ana Developer',
+        'default_monthly_capacity_hours' => 160,
+    ]);
+    $inactivePerson = Person::factory()->create([
+        'active' => false,
         'default_monthly_capacity_hours' => 160,
     ]);
     $project = Project::factory()->create([
@@ -57,6 +66,18 @@ it('builds an executive company overview from the active month', function () {
         'project_id' => $project,
         'started_at' => '2026-07-08 09:00:00',
         'duration_seconds' => 90 * 3600,
+    ]);
+    Allocation::factory()->create([
+        'person_id' => $inactivePerson,
+        'project_id' => $project,
+        'month' => '2026-07-01',
+        'planned_hours' => 80,
+    ]);
+    TimeEntry::factory()->create([
+        'person_id' => $inactivePerson,
+        'project_id' => $project,
+        'started_at' => '2026-07-08 09:00:00',
+        'duration_seconds' => 40 * 3600,
     ]);
     SyncRun::factory()->create([
         'status' => SyncRunStatus::Succeeded,

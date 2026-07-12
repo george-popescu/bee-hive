@@ -12,6 +12,11 @@ use App\Services\Capacity\SettingsService;
 use App\Services\Planning\PlanningPeriod;
 use Carbon\CarbonImmutable;
 
+/**
+ * @phpstan-type UtilizationMonth array{availableCapacityHours: float, plannedHours: float, actualHours: float|null}
+ * @phpstan-type UtilizationRow array{person: array{id: int, name: string, jobRole: string|null, isExternal: bool}, months: array<string, UtilizationMonth>, projectIds: list<int>, hasInternalActual: bool}
+ * @phpstan-type UtilizationPayload array{months: list<array{key: string, label: string}>, defaultStartMonth: string, people: list<array{id: int, name: string}>, roles: list<string>, projects: list<array{id: int, label: string}>, rows: list<UtilizationRow>}
+ */
 class ManagementUtilizationData
 {
     public function __construct(
@@ -22,7 +27,7 @@ class ManagementUtilizationData
     /**
      * @param  list<int>|null  $personIds
      * @param  list<int>|null  $projectIds
-     * @return array<string, mixed>
+     * @return UtilizationPayload
      */
     public function build(?array $personIds = null, ?array $projectIds = null): array
     {
@@ -146,13 +151,13 @@ class ManagementUtilizationData
                 'label' => $this->period->label($month),
             ], $months),
             'defaultStartMonth' => $this->defaultStartMonth($monthKeys),
-            'people' => $rows->map(fn (array $row): array => [
+            'people' => array_values($rows->map(fn (array $row): array => [
                 'id' => $row['person']['id'],
                 'name' => $row['person']['name'],
-            ])->all(),
-            'roles' => $rows->pluck('person.jobRole')->filter()->unique()->sort()->values()->all(),
-            'projects' => $projects,
-            'rows' => $rows->all(),
+            ])->all()),
+            'roles' => array_values($rows->pluck('person.jobRole')->filter()->unique()->sort()->values()->all()),
+            'projects' => array_values($projects),
+            'rows' => array_values($rows->all()),
         ];
     }
 
@@ -162,7 +167,7 @@ class ManagementUtilizationData
      * @param  array<string, float>  $actual
      * @param  array<string, bool>  $actualSeen
      * @param  list<int>  $projectIds
-     * @return array<string, mixed>
+     * @return UtilizationRow&array<string, mixed>
      */
     private function personRow(
         Person $person,

@@ -15,8 +15,10 @@ use App\Services\Planning\PlanningPeriod;
 use App\Services\PmBoard\PmBoardScope;
 use App\Services\TeamLead\TeamLeadScope;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Collection;
 
+/**
+ * @phpstan-import-type UtilizationRow from ManagementUtilizationData
+ */
 class DashboardData
 {
     public function __construct(
@@ -33,17 +35,29 @@ class DashboardData
         $utilization = $this->utilizationData->build($personIds, $projectIds);
         $focusMonth = $this->focusMonth($utilization['months'], $utilization['defaultStartMonth']);
         $rows = collect($utilization['rows']);
-        $focusRows = $rows->map(fn (array $row): array => [
-            'person' => $row['person'],
-            ...($row['months'][$focusMonth] ?? $this->emptyMonth()),
-        ]);
+        $activePersonIds = array_values($rows
+            ->pluck('person.id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->values()
+            ->all());
+        $focusRows = $rows->map(function (array $row) use ($focusMonth): array {
+            $month = $row['months'][$focusMonth] ?? $this->emptyMonth();
+
+            return [
+                'person' => $row['person'],
+                'availableCapacityHours' => (float) $month['availableCapacityHours'],
+                'plannedHours' => (float) $month['plannedHours'],
+                'actualHours' => $month['actualHours'] === null ? null : (float) $month['actualHours'],
+            ];
+        });
         $trend = collect($utilization['months'])
-            ->map(fn (array $month): array => $this->trendMonth($rows, $month))
+            ->map(fn (array $month): array => $this->trendMonth(array_values($rows->all()), $month))
             ->values();
         $capacity = round((float) $focusRows->sum('availableCapacityHours'), 2);
         $planned = round((float) $focusRows->sum('plannedHours'), 2);
         $actual = round((float) $focusRows->sum(fn (array $row): float => (float) ($row['actualHours'] ?? 0)), 2);
-        $attention = $this->attention($focusRows);
+        $focusRowValues = array_values($focusRows->all());
+        $attention = $this->attention($focusRowValues);
 
         return [
             'scope' => $scope,
@@ -63,12 +77,12 @@ class DashboardData
             'trend' => $trend->all(),
             'projects' => $this->projectPerformance(
                 month: $focusMonth,
-                personIds: $personIds,
+                personIds: $activePersonIds,
                 projectIds: $projectIds,
             ),
             'attention' => $attention,
-            'alerts' => $this->alerts($focusRows),
-            'sync' => $this->syncStatus(),
+            'alerts' => $this->alerts($focusRowValues),
+            'sync' => $scope['mode'] === 'empty' ? null : $this->syncStatus(),
         ];
     }
 
@@ -109,7 +123,7 @@ class DashboardData
         $start = $months[0];
         $end = $months[count($months) - 1]->endOfMonth();
 
-        return Allocation::query()
+        return array_values(Allocation::query()
             ->whereIn('project_id', $projectIds)
             ->whereBetween('month', [$start, $end])
             ->pluck('person_id')
@@ -126,7 +140,7 @@ class DashboardData
             ->sort()
             ->map(fn (mixed $id): int => (int) $id)
             ->values()
-            ->all();
+            ->all());
     }
 
     /** @param list<array{key: string, label: string}> $months */
@@ -138,13 +152,13 @@ class DashboardData
     }
 
     /**
-     * @param  Collection<int, array<string, mixed>>  $rows
+     * @param  list<UtilizationRow>  $rows
      * @param  array{key: string, label: string}  $month
      * @return array<string, float|string|int|null>
      */
-    private function trendMonth(Collection $rows, array $month): array
+    private function trendMonth(array $rows, array $month): array
     {
-        $values = $rows->map(fn (array $row): array => $row['months'][$month['key']] ?? $this->emptyMonth());
+        $values = collect($rows)->map(fn (array $row): array => $row['months'][$month['key']] ?? $this->emptyMonth());
         $hasActual = $values->contains(fn (array $value): bool => $value['actualHours'] !== null);
 
         return [
@@ -160,12 +174,12 @@ class DashboardData
     }
 
     /**
-     * @param  Collection<int, array<string, mixed>>  $rows
+     * @param  list<array{person: array{id: int, name: string, jobRole: string|null, isExternal: bool}, availableCapacityHours: float, plannedHours: float, actualHours: float|null}>  $rows
      * @return list<array<string, mixed>>
      */
-    private function attention(Collection $rows): array
+    private function attention(array $rows): array
     {
-        $people = $rows
+        $people = collect($rows)
             ->filter(fn (array $row): bool => ! $row['person']['isExternal'] && (float) $row['availableCapacityHours'] > 0)
             ->map(function (array $row): array {
                 $percent = $this->percent((float) $row['plannedHours'], (float) $row['availableCapacityHours']);
@@ -184,21 +198,21 @@ class DashboardData
             ->values();
         $over = $people->where('status', 'over')->sortByDesc('percent')->take(3);
 
-        return $over
+        return array_values($over
             ->concat($people->where('status', 'under')->sortBy('percent')->take(6 - $over->count()))
             ->concat($people->where('status', 'balanced')->sortByDesc('percent')->take(6 - $over->count()))
             ->unique('id')
             ->take(6)
             ->values()
-            ->all();
+            ->all());
     }
 
     /**
-     * @param  list<int>|null  $personIds
+     * @param  list<int>  $personIds
      * @param  list<int>|null  $projectIds
      * @return list<array<string, mixed>>
      */
-    private function projectPerformance(string $month, ?array $personIds, ?array $projectIds): array
+    private function projectPerformance(string $month, array $personIds, ?array $projectIds): array
     {
         $start = CarbonImmutable::createFromFormat('!Y-m', $month);
         $end = $start->endOfMonth();
@@ -208,7 +222,7 @@ class DashboardData
             ->select('project_id')
             ->selectRaw('SUM(planned_hours) as aggregate_hours')
             ->whereBetween('month', [$start, $end])
-            ->when($personIds !== null && $projectIds === null, fn ($query) => $query->whereIn('person_id', $personIds))
+            ->whereIn('person_id', $personIds)
             ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds))
             ->groupBy('project_id')
             ->get();
@@ -222,7 +236,7 @@ class DashboardData
             ->select('project_id')
             ->selectRaw('SUM(duration_seconds) as aggregate_seconds')
             ->whereBetween('started_at', [$start, $end])
-            ->when($personIds !== null && $projectIds === null, fn ($query) => $query->whereIn('person_id', $personIds))
+            ->whereIn('person_id', $personIds)
             ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds))
             ->groupBy('project_id')
             ->get();
@@ -236,7 +250,7 @@ class DashboardData
             ->select('project_id')
             ->selectRaw('SUM(hours_delta) as aggregate_hours')
             ->whereBetween('month', [$start, $end])
-            ->when($personIds !== null && $projectIds === null, fn ($query) => $query->whereIn('person_id', $personIds))
+            ->whereIn('person_id', $personIds)
             ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds))
             ->groupBy('project_id')
             ->get();
@@ -252,7 +266,7 @@ class DashboardData
             ->get()
             ->keyBy('id');
 
-        return collect($totals)
+        return array_values(collect($totals)
             ->map(function (array $values, int|string $id) use ($projects): array {
                 $project = (int) $id === 0 ? null : $projects->get((int) $id);
                 $planned = round((float) ($values['planned'] ?? 0), 2);
@@ -274,14 +288,17 @@ class DashboardData
             })
             ->take(6)
             ->values()
-            ->all();
+            ->all());
     }
 
-    /** @return list<array{tone: string, title: string, detail: string}> */
-    private function alerts(Collection $rows): array
+    /**
+     * @param  list<array{person: array{id: int, name: string, jobRole: string|null, isExternal: bool}, availableCapacityHours: float, plannedHours: float, actualHours: float|null}>  $rows
+     * @return list<array{tone: string, title: string, detail: string}>
+     */
+    private function alerts(array $rows): array
     {
         $alerts = [];
-        $planning = $rows
+        $planning = collect($rows)
             ->filter(fn (array $row): bool => ! $row['person']['isExternal'] && (float) $row['availableCapacityHours'] > 0)
             ->map(fn (array $row): float => $this->percent(
                 (float) $row['plannedHours'],
