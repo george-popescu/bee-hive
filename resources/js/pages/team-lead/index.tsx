@@ -1,4 +1,4 @@
-import { Head, useForm, useHttp } from '@inertiajs/react';
+import { Head, useForm, useHttp, usePage } from '@inertiajs/react';
 import {
     Check,
     ChevronDown,
@@ -1118,10 +1118,20 @@ export default function TeamLeadPlan({
     adjustments,
     permissions,
 }: Props) {
+    const pageUrl = usePage().url;
+    const requestedPersonId = Number(
+        new URLSearchParams(pageUrl.split('?')[1] ?? '').get('person'),
+    );
+    const hasRequestedPerson = people.some(
+        (person) => person.id === requestedPersonId,
+    );
     const [mode, setMode] = useState<DisplayMode>('plan');
-    const [allPeopleSelected, setAllPeopleSelected] = useState(true);
+    const [allPeopleSelected, setAllPeopleSelected] =
+        useState(!hasRequestedPerson);
     const [selectedPersonIds, setSelectedPersonIds] = useState<number[]>(() =>
-        people.map((person) => person.id),
+        hasRequestedPerson
+            ? [requestedPersonId]
+            : people.map((person) => person.id),
     );
     const [projectFilter, setProjectFilter] = useState('all');
     const [roleFilter, setRoleFilter] = useState('all');

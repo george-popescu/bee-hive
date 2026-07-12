@@ -7,6 +7,9 @@ use App\Models\Setting;
 
 class SettingsService
 {
+    /** @var array<string, mixed> */
+    private array $resolvedValues = [];
+
     public function hoursPerLeaveDay(): float
     {
         return (float) $this->value(SettingKey::HoursPerLeaveDay, 8);
@@ -19,12 +22,16 @@ class SettingsService
 
     public function value(SettingKey $key, mixed $default = null): mixed
     {
+        if (array_key_exists($key->value, $this->resolvedValues)) {
+            return $this->resolvedValues[$key->value];
+        }
+
         $setting = Setting::query()->where('key', $key->value)->first();
 
         if ($setting === null) {
-            return $default;
+            return $this->resolvedValues[$key->value] = $default;
         }
 
-        return $setting->value['value'] ?? $default;
+        return $this->resolvedValues[$key->value] = $setting->value['value'] ?? $default;
     }
 }

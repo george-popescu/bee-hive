@@ -26,52 +26,90 @@ class DashboardData
         private readonly PlanningPeriod $period,
         private readonly TeamLeadScope $teamLeadScope,
         private readonly PmBoardScope $pmBoardScope,
+        private readonly DashboardDataQuality $dataQuality,
     ) {}
 
     /** @return array<string, mixed> */
-    public function for(User $user): array
+    public function for(User $user, ?string $requestedMonth = null): array
     {
         [$personIds, $projectIds, $scope] = $this->scope($user);
         $utilization = $this->utilizationData->build($personIds, $projectIds);
-        $focusMonth = $this->focusMonth($utilization['months'], $utilization['defaultStartMonth']);
+        $planningMonths = $this->period->months();
+        $focusMonthDate = $this->focusMonth(
+            months: $planningMonths,
+            requestedMonth: $requestedMonth,
+            defaultMonth: $utilization['defaultStartMonth'],
+        );
+        $focusMonth = $focusMonthDate->format('Y-m');
+        $reporting = $this->reportingPeriod($focusMonthDate);
         $rows = collect($utilization['rows']);
         $activePersonIds = array_values($rows
             ->pluck('person.id')
             ->map(fn (mixed $id): int => (int) $id)
             ->values()
             ->all());
-        $focusRows = $rows->map(function (array $row) use ($focusMonth): array {
+        $actualByPerson = $this->actualHoursByPerson(
+            personIds: $activePersonIds,
+            projectIds: $projectIds,
+            start: $reporting['start'],
+            end: $reporting['end'],
+        );
+        $focusRows = $rows->map(function (array $row) use ($actualByPerson, $focusMonth): array {
             $month = $row['months'][$focusMonth] ?? $this->emptyMonth();
+            $personId = (int) $row['person']['id'];
 
             return [
                 'person' => $row['person'],
                 'availableCapacityHours' => (float) $month['availableCapacityHours'],
                 'plannedHours' => (float) $month['plannedHours'],
-                'actualHours' => $month['actualHours'] === null ? null : (float) $month['actualHours'],
+                'actualHours' => array_key_exists($personId, $actualByPerson)
+                    ? $actualByPerson[$personId]
+                    : null,
             ];
         });
-        $trend = collect($utilization['months'])
-            ->map(fn (array $month): array => $this->trendMonth(array_values($rows->all()), $month))
-            ->values();
+        $focusRowValues = array_values($focusRows->all());
         $capacity = round((float) $focusRows->sum('availableCapacityHours'), 2);
+        $capacityToDate = round($capacity * $reporting['progress'], 2);
         $planned = round((float) $focusRows->sum('plannedHours'), 2);
         $actual = round((float) $focusRows->sum(fn (array $row): float => (float) ($row['actualHours'] ?? 0)), 2);
-        $focusRowValues = array_values($focusRows->all());
-        $attention = $this->attention($focusRowValues);
+        $activePeople = $focusRows->filter(fn (array $row): bool => (float) ($row['actualHours'] ?? 0) > 0)->count();
+        $forecast = $reporting['progress'] > 0
+            ? round($actual / $reporting['progress'], 2)
+            : null;
+        $trend = collect($utilization['months'])
+            ->map(fn (array $month): array => $this->trendMonth(array_values($rows->all()), $month))
+            ->map(function (array $month) use ($activePeople, $actual, $actualByPerson, $focusMonth): array {
+                if ($month['key'] !== $focusMonth) {
+                    return $month;
+                }
+
+                return [
+                    ...$month,
+                    'actualHours' => $actualByPerson === [] ? null : $actual,
+                    'activePeople' => $activePeople,
+                ];
+            })
+            ->values();
 
         return [
             'scope' => $scope,
+            'period' => $this->periodData($planningMonths, $focusMonthDate, $reporting),
             'focusMonth' => [
                 'key' => $focusMonth,
-                'label' => collect($utilization['months'])->firstWhere('key', $focusMonth)['label'] ?? $focusMonth,
+                'label' => $this->period->label($focusMonthDate),
             ],
             'kpis' => [
                 'capacityHours' => $capacity,
+                'capacityToDateHours' => $capacityToDate,
                 'plannedHours' => $planned,
                 'actualHours' => $actual,
-                'utilizationPercent' => $this->percent($actual, $capacity),
+                'utilizationPercent' => $this->nullablePercent($actual, $capacityToDate),
+                'monthlyUtilizationPercent' => $this->percent($actual, $capacity),
                 'planningPercent' => $this->percent($planned, $capacity),
-                'activePeople' => $focusRows->filter(fn (array $row): bool => (float) ($row['actualHours'] ?? 0) > 0)->count(),
+                'forecastHours' => $forecast,
+                'forecastVsPlanHours' => $forecast === null ? null : round($forecast - $planned, 2),
+                'paceStatus' => $this->paceStatus($forecast, $planned),
+                'activePeople' => $activePeople,
                 'people' => $focusRows->count(),
             ],
             'trend' => $trend->all(),
@@ -79,9 +117,19 @@ class DashboardData
                 month: $focusMonth,
                 personIds: $activePersonIds,
                 projectIds: $projectIds,
+                actualEnd: $reporting['end'],
             ),
-            'attention' => $attention,
+            'attention' => $this->attention($focusRowValues),
             'alerts' => $this->alerts($focusRowValues),
+            'dataQuality' => $scope['mode'] === 'empty'
+                ? null
+                : $this->dataQuality->build(
+                    personIds: $personIds,
+                    projectIds: $projectIds,
+                    scopeMode: $scope['mode'],
+                    start: $reporting['start'],
+                    end: $reporting['end'],
+                ),
             'sync' => $scope['mode'] === 'empty' ? null : $this->syncStatus(),
         ];
     }
@@ -108,6 +156,118 @@ class DashboardData
         }
 
         return [[], [], ['label' => 'Fără scope operațional', 'mode' => 'empty']];
+    }
+
+    /**
+     * @param  list<CarbonImmutable>  $months
+     */
+    private function focusMonth(array $months, ?string $requestedMonth, string $defaultMonth): CarbonImmutable
+    {
+        if ($requestedMonth !== null) {
+            foreach ($months as $month) {
+                if ($month->format('Y-m') === $requestedMonth) {
+                    return $month;
+                }
+            }
+        }
+
+        foreach ($months as $month) {
+            if ($month->format('Y-m') === now()->format('Y-m')) {
+                return $month;
+            }
+        }
+
+        foreach ($months as $month) {
+            if ($month->format('Y-m') === $defaultMonth) {
+                return $month;
+            }
+        }
+
+        return $months[0];
+    }
+
+    /**
+     * @param  list<CarbonImmutable>  $months
+     * @param  array{start: CarbonImmutable, end: CarbonImmutable, asOf: string|null, progress: float, elapsedWorkdays: int, totalWorkdays: int, state: string}  $reporting
+     * @return array<string, mixed>
+     */
+    private function periodData(array $months, CarbonImmutable $selectedMonth, array $reporting): array
+    {
+        $selectedKey = $selectedMonth->format('Y-m');
+        $selectedIndex = array_search($selectedKey, array_map(
+            fn (CarbonImmutable $month): string => $month->format('Y-m'),
+            $months,
+        ), true);
+        $selectedIndex = is_int($selectedIndex) ? $selectedIndex : 0;
+
+        return [
+            'selected' => $selectedKey,
+            'label' => $this->period->label($selectedMonth),
+            'options' => array_map(fn (CarbonImmutable $month): array => [
+                'key' => $month->format('Y-m'),
+                'label' => $this->period->label($month),
+            ], $months),
+            'previous' => $selectedIndex > 0 ? $months[$selectedIndex - 1]->format('Y-m') : null,
+            'next' => $selectedIndex < count($months) - 1 ? $months[$selectedIndex + 1]->format('Y-m') : null,
+            'asOf' => $reporting['asOf'],
+            'state' => $reporting['state'],
+            'progressPercent' => round($reporting['progress'] * 100, 1),
+            'elapsedWorkdays' => $reporting['elapsedWorkdays'],
+            'totalWorkdays' => $reporting['totalWorkdays'],
+        ];
+    }
+
+    /**
+     * @return array{start: CarbonImmutable, end: CarbonImmutable, asOf: string|null, progress: float, elapsedWorkdays: int, totalWorkdays: int, state: string}
+     */
+    private function reportingPeriod(CarbonImmutable $month): array
+    {
+        $start = $month->startOfMonth();
+        $monthEnd = $month->endOfMonth();
+        $today = now()->toImmutable();
+        $totalWorkdays = $this->weekdays($start, $monthEnd);
+
+        if ($today->isBefore($start)) {
+            return [
+                'start' => $start,
+                'end' => $start->subSecond(),
+                'asOf' => null,
+                'progress' => 0.0,
+                'elapsedWorkdays' => 0,
+                'totalWorkdays' => $totalWorkdays,
+                'state' => 'future',
+            ];
+        }
+
+        $end = $today->isAfter($monthEnd) ? $monthEnd : $today->endOfDay();
+        $elapsedWorkdays = $this->weekdays($start, $end);
+
+        return [
+            'start' => $start,
+            'end' => $end,
+            'asOf' => $end->toDateString(),
+            'progress' => $totalWorkdays === 0 ? 0.0 : $elapsedWorkdays / $totalWorkdays,
+            'elapsedWorkdays' => $elapsedWorkdays,
+            'totalWorkdays' => $totalWorkdays,
+            'state' => $today->isAfter($monthEnd) ? 'past' : 'current',
+        ];
+    }
+
+    private function weekdays(CarbonImmutable $start, CarbonImmutable $end): int
+    {
+        if ($end->isBefore($start)) {
+            return 0;
+        }
+
+        $days = 0;
+
+        for ($date = $start->startOfDay(); $date->lessThanOrEqualTo($end); $date = $date->addDay()) {
+            if ($date->isWeekday()) {
+                $days++;
+            }
+        }
+
+        return $days;
     }
 
     /** @param list<int> $projectIds
@@ -143,12 +303,53 @@ class DashboardData
             ->all());
     }
 
-    /** @param list<array{key: string, label: string}> $months */
-    private function focusMonth(array $months, string $default): string
-    {
-        $current = now()->format('Y-m');
+    /**
+     * @param  list<int>  $personIds
+     * @param  list<int>|null  $projectIds
+     * @return array<int, float>
+     */
+    private function actualHoursByPerson(
+        array $personIds,
+        ?array $projectIds,
+        CarbonImmutable $start,
+        CarbonImmutable $end,
+    ): array {
+        if ($personIds === [] || $end->isBefore($start)) {
+            return [];
+        }
 
-        return collect($months)->contains('key', $current) ? $current : $default;
+        $actual = [];
+        $entries = TimeEntry::query()
+            ->select('person_id')
+            ->selectRaw('SUM(duration_seconds) as aggregate_seconds')
+            ->whereIn('person_id', $personIds)
+            ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds))
+            ->whereBetween('started_at', [$start, $end])
+            ->groupBy('person_id')
+            ->get();
+
+        foreach ($entries as $entry) {
+            $actual[(int) $entry->person_id] = round(((int) $entry->getAttribute('aggregate_seconds')) / 3600, 2);
+        }
+
+        $adjustments = ActualAdjustment::query()
+            ->select('person_id')
+            ->selectRaw('SUM(hours_delta) as aggregate_hours')
+            ->whereIn('person_id', $personIds)
+            ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds))
+            ->whereBetween('effective_date', [$start->toDateString(), $end->toDateString()])
+            ->groupBy('person_id')
+            ->get();
+
+        foreach ($adjustments as $adjustment) {
+            $personId = (int) $adjustment->person_id;
+            $actual[$personId] = round(
+                ($actual[$personId] ?? 0.0) + (float) $adjustment->getAttribute('aggregate_hours'),
+                2,
+            );
+        }
+
+        return $actual;
     }
 
     /**
@@ -180,17 +381,17 @@ class DashboardData
     private function attention(array $rows): array
     {
         $people = collect($rows)
-            ->filter(fn (array $row): bool => ! $row['person']['isExternal'] && (float) $row['availableCapacityHours'] > 0)
+            ->filter(fn (array $row): bool => ! $row['person']['isExternal'] && $row['availableCapacityHours'] > 0)
             ->map(function (array $row): array {
-                $percent = $this->percent((float) $row['plannedHours'], (float) $row['availableCapacityHours']);
+                $percent = $this->percent($row['plannedHours'], $row['availableCapacityHours']);
 
                 return [
                     'id' => $row['person']['id'],
                     'name' => $row['person']['name'],
                     'role' => $row['person']['jobRole'],
-                    'capacityHours' => (float) $row['availableCapacityHours'],
-                    'plannedHours' => (float) $row['plannedHours'],
-                    'actualHours' => $row['actualHours'] === null ? null : (float) $row['actualHours'],
+                    'capacityHours' => $row['availableCapacityHours'],
+                    'plannedHours' => $row['plannedHours'],
+                    'actualHours' => $row['actualHours'],
                     'percent' => $percent,
                     'status' => $percent > 105 ? 'over' : ($percent >= 90 ? 'balanced' : 'under'),
                 ];
@@ -212,52 +413,58 @@ class DashboardData
      * @param  list<int>|null  $projectIds
      * @return list<array<string, mixed>>
      */
-    private function projectPerformance(string $month, array $personIds, ?array $projectIds): array
-    {
+    private function projectPerformance(
+        string $month,
+        array $personIds,
+        ?array $projectIds,
+        CarbonImmutable $actualEnd,
+    ): array {
         $start = CarbonImmutable::createFromFormat('!Y-m', $month);
-        $end = $start->endOfMonth();
+        $monthEnd = $start->endOfMonth();
         $totals = [];
 
         $allocations = Allocation::query()
             ->select('project_id')
             ->selectRaw('SUM(planned_hours) as aggregate_hours')
-            ->whereBetween('month', [$start, $end])
+            ->whereBetween('month', [$start, $monthEnd])
             ->whereIn('person_id', $personIds)
             ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds))
             ->groupBy('project_id')
             ->get();
 
         foreach ($allocations as $allocation) {
-            $id = (int) $allocation->project_id;
-            $totals[$id]['planned'] = (float) $allocation->getAttribute('aggregate_hours');
+            $totals[(int) $allocation->project_id]['planned'] = (float) $allocation->getAttribute('aggregate_hours');
         }
 
-        $entries = TimeEntry::query()
-            ->select('project_id')
-            ->selectRaw('SUM(duration_seconds) as aggregate_seconds')
-            ->whereBetween('started_at', [$start, $end])
-            ->whereIn('person_id', $personIds)
-            ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds))
-            ->groupBy('project_id')
-            ->get();
+        if ($actualEnd->greaterThanOrEqualTo($start)) {
+            $entries = TimeEntry::query()
+                ->select('project_id')
+                ->selectRaw('SUM(duration_seconds) as aggregate_seconds')
+                ->whereBetween('started_at', [$start, $actualEnd])
+                ->whereIn('person_id', $personIds)
+                ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds))
+                ->groupBy('project_id')
+                ->get();
 
-        foreach ($entries as $entry) {
-            $id = $entry->project_id === null ? 0 : (int) $entry->project_id;
-            $totals[$id]['actual'] = ((int) $entry->getAttribute('aggregate_seconds')) / 3600;
-        }
+            foreach ($entries as $entry) {
+                $projectId = $entry->project_id === null ? 0 : (int) $entry->project_id;
+                $totals[$projectId]['actual'] = ((int) $entry->getAttribute('aggregate_seconds')) / 3600;
+            }
 
-        $adjustments = ActualAdjustment::query()
-            ->select('project_id')
-            ->selectRaw('SUM(hours_delta) as aggregate_hours')
-            ->whereBetween('month', [$start, $end])
-            ->whereIn('person_id', $personIds)
-            ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds))
-            ->groupBy('project_id')
-            ->get();
+            $adjustments = ActualAdjustment::query()
+                ->select('project_id')
+                ->selectRaw('SUM(hours_delta) as aggregate_hours')
+                ->whereBetween('effective_date', [$start->toDateString(), $actualEnd->toDateString()])
+                ->whereIn('person_id', $personIds)
+                ->when($projectIds !== null, fn ($query) => $query->whereIn('project_id', $projectIds))
+                ->groupBy('project_id')
+                ->get();
 
-        foreach ($adjustments as $adjustment) {
-            $id = $adjustment->project_id === null ? 0 : (int) $adjustment->project_id;
-            $totals[$id]['actual'] = ($totals[$id]['actual'] ?? 0.0) + (float) $adjustment->getAttribute('aggregate_hours');
+            foreach ($adjustments as $adjustment) {
+                $projectId = $adjustment->project_id === null ? 0 : (int) $adjustment->project_id;
+                $totals[$projectId]['actual'] = ($totals[$projectId]['actual'] ?? 0.0)
+                    + (float) $adjustment->getAttribute('aggregate_hours');
+            }
         }
 
         $projects = Project::query()
@@ -299,10 +506,10 @@ class DashboardData
     {
         $alerts = [];
         $planning = collect($rows)
-            ->filter(fn (array $row): bool => ! $row['person']['isExternal'] && (float) $row['availableCapacityHours'] > 0)
+            ->filter(fn (array $row): bool => ! $row['person']['isExternal'] && $row['availableCapacityHours'] > 0)
             ->map(fn (array $row): float => $this->percent(
-                (float) $row['plannedHours'],
-                (float) $row['availableCapacityHours'],
+                $row['plannedHours'],
+                $row['availableCapacityHours'],
             ));
         $over = $planning->filter(fn (float $value): bool => $value > 105)->count();
         $under = $planning->filter(fn (float $value): bool => $value < 70)->count();
@@ -354,8 +561,28 @@ class DashboardData
         ];
     }
 
+    private function nullablePercent(float $hours, float $capacity): ?float
+    {
+        return $capacity <= 0 ? null : round(($hours / $capacity) * 100, 1);
+    }
+
     private function percent(float $hours, float $capacity): float
     {
         return $capacity <= 0 ? 0.0 : round(($hours / $capacity) * 100, 1);
+    }
+
+    private function paceStatus(?float $forecast, float $planned): string
+    {
+        if ($forecast === null) {
+            return 'future';
+        }
+
+        if ($planned <= 0) {
+            return $forecast > 0 ? 'over' : 'empty';
+        }
+
+        $percent = ($forecast / $planned) * 100;
+
+        return $percent > 105 ? 'over' : ($percent >= 90 ? 'balanced' : 'under');
     }
 }

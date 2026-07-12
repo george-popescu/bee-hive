@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import { CalendarOff, ChartNoAxesCombined, RotateCcw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -190,8 +190,23 @@ export default function ManagementUtilization({
     projects,
     rows,
 }: Props) {
+    const pageUrl = usePage().url;
+    const requestedPersonId = new URLSearchParams(
+        pageUrl.split('?')[1] ?? '',
+    ).get('person');
+    const requestedMonth = new URLSearchParams(pageUrl.split('?')[1] ?? '').get(
+        'month',
+    );
+    const rangeStartMonth = months.some((month) => month.key === requestedMonth)
+        ? requestedMonth
+        : defaultStartMonth;
     const [visibleRange, setVisibleRange] = useState<VisibleRange>('6');
-    const [personFilter, setPersonFilter] = useState('all');
+    const [personFilter, setPersonFilter] = useState(() =>
+        requestedPersonId !== null &&
+        people.some((person) => String(person.id) === requestedPersonId)
+            ? requestedPersonId
+            : 'all',
+    );
     const [roleFilter, setRoleFilter] = useState('all');
     const [projectFilter, setProjectFilter] = useState('all');
     const visibleMonths = useMemo(() => {
@@ -201,11 +216,11 @@ export default function ManagementUtilization({
 
         const startIndex = Math.max(
             0,
-            months.findIndex((month) => month.key === defaultStartMonth),
+            months.findIndex((month) => month.key === rangeStartMonth),
         );
 
         return months.slice(startIndex, startIndex + Number(visibleRange));
-    }, [defaultStartMonth, months, visibleRange]);
+    }, [months, rangeStartMonth, visibleRange]);
     const filteredRows = useMemo(
         () =>
             rows

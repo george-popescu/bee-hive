@@ -2,17 +2,20 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ViewDashboardRequest;
 use App\Services\Dashboard\DashboardData;
-use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function __invoke(Request $request, DashboardData $dashboardData): Response
+    public function __invoke(ViewDashboardRequest $request, DashboardData $dashboardData): Response
     {
         return Inertia::render('dashboard', [
-            'dashboard' => $dashboardData->for($request->user()),
+            'dashboard' => $dashboardData->for(
+                user: $request->user(),
+                requestedMonth: $request->validated('month'),
+            ),
         ]);
     }
 }

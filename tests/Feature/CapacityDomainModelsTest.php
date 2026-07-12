@@ -8,7 +8,9 @@ use App\Models\Project;
 use App\Models\Setting;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\Capacity\SettingsService;
 use Database\Seeders\SettingsSeeder;
+use Illuminate\Support\Facades\DB;
 
 it('connects operational people to users teams projects and clickup tasks', function () {
     $user = User::factory()->create();
@@ -44,4 +46,24 @@ it('seeds capacity settings idempotently', function () {
     expect(Setting::query()->count())->toBe(count(SettingKey::cases()))
         ->and(Setting::query()->where('key', SettingKey::HoursPerLeaveDay->value)->first()->value)
         ->toBe(['value' => 8]);
+});
+
+it('resolves each capacity setting only once per service instance', function () {
+    Setting::factory()->create([
+        'key' => SettingKey::HoursPerLeaveDay->value,
+        'value' => ['value' => 7.5],
+    ]);
+    $settings = new SettingsService;
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+
+    expect($settings->hoursPerLeaveDay())->toBe(7.5)
+        ->and($settings->hoursPerLeaveDay())->toBe(7.5);
+
+    $settingQueries = collect(DB::getQueryLog())
+        ->filter(fn (array $query): bool => str_contains($query['query'], 'from "settings"'))
+        ->count();
+    DB::disableQueryLog();
+
+    expect($settingQueries)->toBe(1);
 });
