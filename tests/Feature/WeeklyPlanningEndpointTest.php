@@ -2,6 +2,7 @@
 
 use App\Enums\PermissionName;
 use App\Enums\ProjectBoardTemplate;
+use App\Models\AuditLog;
 use App\Models\ClickUpTask;
 use App\Models\Person;
 use App\Models\Project;
@@ -276,4 +277,47 @@ it('rejects a stale optimistic locking timestamp', function () {
         ->assertConflict();
 
     expect(WeeklyPlan::query()->sole()->allocations()->value('hours'))->toBe('10.00');
+});
+
+it('clears selected plans for one week while retaining allocations and auditing the change', function () {
+    $project = Project::factory()->create(['contract_type' => ProjectBoardTemplate::Deliverables]);
+    $task = weeklyPlanningTask($project);
+    $otherTask = weeklyPlanningTask($project);
+    $user = weeklyPlanningEditor($project);
+    $person = Person::factory()->create();
+
+    foreach ([[$task, '2026-07-06'], [$otherTask, '2026-07-13']] as [$plannedTask, $weekStart]) {
+        $plan = WeeklyPlan::query()->create([
+            'project_id' => $project->id,
+            'click_up_task_id' => $plannedTask->id,
+            'week_start' => $weekStart,
+            'selected' => true,
+            'version' => 1,
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+        ]);
+        $plan->allocations()->create([
+            'person_id' => $person->id,
+            'hours' => 8,
+            'created_by' => $user->id,
+            'updated_by' => $user->id,
+        ]);
+    }
+
+    $this->actingAs($user)
+        ->deleteJson(route('weekly_planning.clear'), [
+            'project_id' => $project->id,
+            'week_start' => '2026-07-06',
+        ])
+        ->assertOk()
+        ->assertJson(['cleared' => 1]);
+
+    $cleared = WeeklyPlan::query()->whereDate('week_start', '2026-07-06')->sole();
+    $other = WeeklyPlan::query()->whereDate('week_start', '2026-07-13')->sole();
+
+    expect($cleared->selected)->toBeFalse()
+        ->and($cleared->version)->toBe(2)
+        ->and($cleared->allocations()->value('hours'))->toBe('8.00')
+        ->and($other->selected)->toBeTrue()
+        ->and(AuditLog::query()->where('action', 'weekly_plan.cleared')->count())->toBe(1);
 });

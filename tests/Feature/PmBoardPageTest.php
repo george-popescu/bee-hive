@@ -167,6 +167,10 @@ it('builds weekly worked and upcoming metrics from period and lifetime hours', f
                 'actualHours' => 7,
                 'workedTasks' => 1,
                 'plannedTasks' => 1,
+                'activeTasks' => 1,
+                'todoTasks' => 0,
+                'selectedTasks' => 0,
+                'plannedNextWeekHours' => 0,
                 'activePeople' => 2,
                 'projects' => 1,
             ])

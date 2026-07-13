@@ -85,6 +85,32 @@ class WeeklyPlanningService
         });
     }
 
+    /** @param array{project_id: int, week_start: string} $data */
+    public function clear(array $data, User $user): int
+    {
+        return DB::transaction(function () use ($data, $user): int {
+            $plans = WeeklyPlan::query()
+                ->where('project_id', $data['project_id'])
+                ->whereDate('week_start', $data['week_start'])
+                ->where('selected', true)
+                ->with('allocations')
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($plans as $plan) {
+                $before = $this->snapshot($plan);
+                $plan->update([
+                    'selected' => false,
+                    'version' => $plan->version + 1,
+                    'updated_by' => $user->getKey(),
+                ]);
+                $this->audit->log($user, $plan, 'weekly_plan.cleared', $before, $this->snapshot($plan));
+            }
+
+            return $plans->count();
+        });
+    }
+
     /** @return array<string, mixed> */
     private function snapshot(WeeklyPlan $plan): array
     {

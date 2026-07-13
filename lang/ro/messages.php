@@ -33,6 +33,7 @@ return [
         'deliverables_template' => 'Livrabile / Fixed',
         'planning_conflict' => 'Planificarea a fost modificată de alt utilizator. Reîncarcă pagina.',
         'week_must_start_on_monday' => 'Săptămâna trebuie să înceapă luni.',
+        'general_module' => 'General',
     ],
     'adjustments' => [
         'created' => 'Ajustarea a fost înregistrată.',

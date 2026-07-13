@@ -578,6 +578,33 @@ const romanianMessages = {
         'Toate pontajele analizate au persoană și proiect identificabile.',
     'Variances from planned capacity for the focus month.':
         'Abateri față de capacitatea planificată pentru luna de focus.',
+    'Capacity: :hours': 'Capacitate: :hours',
+    'Clear every selected task for this planning week? Allocated hours will be kept for later reuse.':
+        'Ștergi selecția tuturor taskurilor din această săptămână de planificare? Orele alocate rămân salvate pentru reutilizare.',
+    'Clear selection': 'Șterge selecția',
+    'Connection failed. Please try again.':
+        'Conexiunea a eșuat. Încearcă din nou.',
+    End: 'Sfârșit',
+    Estimate: 'Estimare',
+    'Export CSV': 'Exportă CSV',
+    'Export PDF': 'Exportă PDF',
+    Logged: 'Pontat',
+    Module: 'Modul',
+    'No tasks selected for next week.':
+        'Nu există taskuri selectate pentru săptămâna următoare.',
+    'Planned next week': 'Planificat săptămâna următoare',
+    'Selected next week': 'Selectate pentru săptămâna următoare',
+    'Selected task allocations': 'Alocările taskurilor selectate',
+    Start: 'Start',
+    'The weekly planning could not be cleared.':
+        'Selecția planificării săptămânale nu a putut fi ștearsă.',
+    'To do': 'De făcut',
+    'Total planned': 'Total planificat',
+    ':count planned tasks were cleared.':
+        'Selecția a fost ștearsă pentru :count taskuri planificate.',
+    available: 'disponibil',
+    'planned next week': 'planificate săptămâna următoare',
+    'selected tasks': 'taskuri selectate',
     Pending: 'În așteptare',
 } as const;
 

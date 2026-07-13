@@ -112,6 +112,10 @@ class PmBoardData
                     'actualHours' => 0.0,
                     'workedTasks' => 0,
                     'plannedTasks' => 0,
+                    'activeTasks' => 0,
+                    'todoTasks' => 0,
+                    'selectedTasks' => 0,
+                    'plannedNextWeekHours' => 0.0,
                     'activePeople' => 0,
                     'projects' => $projects->count(),
                 ],
@@ -133,6 +137,7 @@ class PmBoardData
                 'id',
                 'project_id',
                 'clickup_task_id',
+                'clickup_list_id',
                 'name',
                 'status',
                 'estimate_seconds',
@@ -157,7 +162,11 @@ class PmBoardData
             ->where(fn ($query) => $query
                 ->where('active', true)
                 ->orWhereIn('id', $taskIdsWithEntries))
-            ->with(['assignees:id,name', 'project:id,client,name'])
+            ->with([
+                'assignees:id,name',
+                'clickUpList:id,clickup_list_id,name',
+                'project:id,client,name',
+            ])
             ->orderBy('name')
             ->get();
         $taskIds = $tasks->modelKeys();
@@ -210,8 +219,10 @@ class PmBoardData
             ? $this->planningData($selectedProject, $upcomingTasks, $rangeEnd->addDay()->startOfDay())
             : null;
         $gantt = $isDeliverables
-            ? $this->ganttData($tasks, $taskRows, $planning, $rangeStart)
+            ? $this->ganttData($selectedProject, $tasks, $taskRows, $planning)
             : null;
+        $selectedPlans = collect(is_array($planning['plans'] ?? null) ? $planning['plans'] : [])
+            ->where('selected', true);
 
         return [
             'projects' => $projects->map(fn (Project $project): array => $this->projectData($project, $periodSecondsByProject))->all(),
@@ -239,6 +250,10 @@ class PmBoardData
                 'actualHours' => round($workedTasks->sum('periodHours'), 2),
                 'workedTasks' => $workedTasks->count(),
                 'plannedTasks' => $upcomingTasks->whereNotNull('estimateHours')->count(),
+                'activeTasks' => $upcomingTasks->where('statusGroup', '0-active')->count(),
+                'todoTasks' => $upcomingTasks->where('statusGroup', '1-todo')->count(),
+                'selectedTasks' => $selectedPlans->count(),
+                'plannedNextWeekHours' => round((float) $selectedPlans->sum('totalHours'), 2),
                 'activePeople' => count($peopleWorked),
                 'projects' => $projects->count(),
             ],
@@ -280,11 +295,11 @@ class PmBoardData
         $isDone = str_contains($normalizedStatus, 'done')
             || str_contains($normalizedStatus, 'complete')
             || str_contains($normalizedStatus, 'closed');
-        $statusGroup = str_contains($normalizedStatus, 'progress')
-            || str_contains($normalizedStatus, 'qa')
-            || str_contains($normalizedStatus, 'review')
-            ? '0-active'
-            : '1-todo';
+        $statusGroup = str_contains($normalizedStatus, 'to do')
+            || $normalizedStatus === 'open'
+            || $normalizedStatus === 'backlog'
+            ? '1-todo'
+            : '0-active';
 
         return [
             'id' => $task->getKey(),
@@ -562,6 +577,9 @@ class PmBoardData
                 'plannedHours' => round($planned, 2),
                 'weeklyCapacityHours' => $resource['weeklyCapacityHours'],
                 'remainingHours' => round($resource['weeklyCapacityHours'] - $planned, 2),
+                'utilizationPercent' => $resource['weeklyCapacityHours'] > 0
+                    ? round(($planned / $resource['weeklyCapacityHours']) * 100, 1)
+                    : null,
             ];
         })->values();
 
@@ -579,7 +597,7 @@ class PmBoardData
      * @param  array<string, mixed>  $planning
      * @return array<string, mixed>
      */
-    private function ganttData(EloquentCollection $tasks, Collection $taskRows, array $planning, CarbonImmutable $rangeStart): array
+    private function ganttData(Project $project, EloquentCollection $tasks, Collection $taskRows, array $planning): array
     {
         $taskData = $taskRows->keyBy('id');
         $selectedTaskIds = [];
@@ -592,27 +610,42 @@ class PmBoardData
                 }
             }
         }
-        $firstWeek = $rangeStart->subWeek()->startOfWeek();
-        $weeks = collect(range(0, 7))->map(function (int $offset) use ($firstWeek): array {
-            $start = $firstWeek->addWeeks($offset);
+        $ganttTasks = $tasks
+            ->filter(fn (ClickUpTask $task): bool => $task->start_at !== null && $task->due_at !== null)
+            ->sortBy(fn (ClickUpTask $task): string => $task->start_at?->toDateString().'|'.$task->due_at?->toDateString())
+            ->values();
+
+        if ($ganttTasks->isEmpty()) {
+            return ['weeks' => [], 'rows' => []];
+        }
+
+        $firstWeek = CarbonImmutable::parse($ganttTasks->min('start_at'))->startOfWeek();
+        $lastWeek = CarbonImmutable::parse($ganttTasks->max('due_at'))->startOfWeek();
+        $weeks = collect();
+        $start = $firstWeek;
+
+        while ($start->lessThanOrEqualTo($lastWeek)) {
             $end = $start->endOfWeek();
 
-            return [
+            $weeks->push([
                 'key' => $start->toDateString(),
                 'label' => $this->shortDate($start).'–'.$this->shortDate($end),
                 'start' => $start->toDateString(),
                 'end' => $end->toDateString(),
                 'isCurrent' => $start->isSameDay(CarbonImmutable::now()->startOfWeek()),
-            ];
-        });
-        $rows = $tasks
-            ->filter(fn (ClickUpTask $task): bool => $task->start_at !== null || $task->due_at !== null)
-            ->sortBy(fn (ClickUpTask $task): string => ($task->start_at?->toDateString() ?? '9999-12-31').'|'.($task->due_at?->toDateString() ?? '9999-12-31'))
-            ->map(function (ClickUpTask $task) use ($taskData, $selectedTaskIds): array {
+                'isoWeek' => (int) $start->format('W'),
+                'monthKey' => $start->format('Y-m'),
+                'monthLabel' => $start->translatedFormat('M Y'),
+            ]);
+            $start = $start->addWeek();
+        }
+        $rows = $ganttTasks
+            ->map(function (ClickUpTask $task) use ($project, $taskData, $selectedTaskIds): array {
                 $row = $taskData->get($task->getKey(), []);
 
                 return [
                     'id' => $task->getKey(),
+                    'module' => $this->ganttModule($project, $task),
                     'name' => $task->name,
                     'url' => "https://app.clickup.com/t/{$task->clickup_task_id}",
                     'status' => trim((string) $task->status) ?: __('messages.common.no_status'),
@@ -627,6 +660,34 @@ class PmBoardData
             ->values();
 
         return ['weeks' => $weeks->all(), 'rows' => $rows->all()];
+    }
+
+    private function ganttModule(Project $project, ClickUpTask $task): string
+    {
+        $configuredModules = data_get($project->board_config, 'gantt_modules', []);
+        $configured = is_array($configuredModules)
+            ? ($configuredModules[$task->clickup_task_id] ?? null)
+            : null;
+
+        if (is_string($configured) && trim($configured) !== '') {
+            return trim($configured);
+        }
+
+        preg_match_all('/\[([^\]]+)\]/u', $task->name, $matches);
+        $genericLabels = ['projects', 'project', 'new platform', 'la depozit', 'osiris'];
+        $labels = collect($matches[1])
+            ->map(fn (mixed $label): string => trim((string) $label))
+            ->reject(fn (string $label): bool => $label === '' || in_array(mb_strtolower($label), $genericLabels, true));
+
+        if ($labels->isNotEmpty()) {
+            return (string) $labels->last();
+        }
+
+        $listName = trim((string) $task->clickUpList?->name);
+
+        return $listName !== '' && mb_strtolower($listName) !== 'backlog'
+            ? $listName
+            : __('messages.pm_board.general_module');
     }
 
     /**

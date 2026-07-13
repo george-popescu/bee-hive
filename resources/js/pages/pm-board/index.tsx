@@ -3,16 +3,22 @@ import {
     ArrowLeft,
     ArrowRight,
     ChevronDown,
+    Download,
     ExternalLink,
     LayoutDashboard,
+    Printer,
     RefreshCw,
     Save,
     Star,
+    Trash2,
 } from 'lucide-react';
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { store as syncClickUp } from '@/actions/App/Http/Controllers/ClickUpSyncController';
-import { upsert as upsertWeeklyPlanning } from '@/actions/App/Http/Controllers/WeeklyPlanningController';
+import {
+    clear as clearWeeklyPlanning,
+    upsert as upsertWeeklyPlanning,
+} from '@/actions/App/Http/Controllers/WeeklyPlanningController';
 import { SummaryCharts } from '@/components/pm-board/summary-charts';
 import type { SummaryChartData } from '@/components/pm-board/summary-charts';
 import { Badge } from '@/components/ui/badge';
@@ -82,6 +88,7 @@ type BoardTask = {
     projectLabel: string;
     url: string;
     status: string;
+    statusGroup: '0-active' | '1-todo';
     isDone: boolean;
     active: boolean;
     owners: string[];
@@ -119,6 +126,7 @@ type Planning = {
         plannedHours: number;
         weeklyCapacityHours: number;
         remainingHours: number;
+        utilizationPercent: number | null;
     }>;
 };
 type Gantt = {
@@ -128,9 +136,13 @@ type Gantt = {
         start: string;
         end: string;
         isCurrent: boolean;
+        isoWeek: number;
+        monthKey: string;
+        monthLabel: string;
     }>;
     rows: Array<{
         id: number;
+        module: string;
         name: string;
         url: string;
         status: string;
@@ -167,6 +179,10 @@ type Props = {
         actualHours: number;
         workedTasks: number;
         plannedTasks: number;
+        activeTasks: number;
+        todoTasks: number;
+        selectedTasks: number;
+        plannedNextWeekHours: number;
         activePeople: number;
         projects: number;
     };
@@ -191,6 +207,8 @@ type WeeklyPlanningPayload = {
 type WeeklyPlanningResponse = {
     plan: { id: number; selected: boolean; version: number; updatedAt: string };
 };
+type ClearWeeklyPlanningPayload = { project_id: number; week_start: string };
+type ClearWeeklyPlanningResponse = { cleared: number };
 type ProjectSelection = {
     all: boolean;
     projectIds: number[];
@@ -235,6 +253,38 @@ function selectionQuery(selection: ProjectSelection) {
     };
 }
 
+function exportHref(
+    selection: ProjectSelection,
+    period: Period,
+    pm: number | null,
+): string {
+    const params = new URLSearchParams();
+
+    if (!selection.all) {
+        if (selection.projectIds.length === 1 && !selection.includeInternal) {
+            params.set('project', String(selection.projectIds[0]));
+        } else {
+            params.set('selection', 'custom');
+            selection.projectIds.forEach((id) =>
+                params.append('projects[]', String(id)),
+            );
+
+            if (selection.includeInternal) {
+                params.set('include_internal', '1');
+            }
+        }
+    }
+
+    params.set('period', period.type);
+    params.set('anchor', period.anchor);
+
+    if (pm !== null) {
+        params.set('pm', String(pm));
+    }
+
+    return `/pm-board/export.csv?${params.toString()}`;
+}
+
 function TaskStatus({ task }: { task: BoardTask }) {
     if (task.isDone) {
         return <Badge variant="success">{task.status}</Badge>;
@@ -244,6 +294,17 @@ function TaskStatus({ task }: { task: BoardTask }) {
         <Badge variant={task.isOverrun ? 'destructive' : 'secondary'}>
             {task.status}
         </Badge>
+    );
+}
+
+function StatusDot({ status }: { status: string }) {
+    return (
+        <span
+            className={`inline-block size-2.5 shrink-0 rounded-full ${ganttCellClass(status)}`}
+            title={status}
+            role="img"
+            aria-label={status}
+        />
     );
 }
 
@@ -296,11 +357,15 @@ function DeliverableTaskRows({
     projectId,
     planning,
     editable,
+    presentation,
+    showTodoDivider,
 }: {
     task: BoardTask;
     projectId: number;
     planning: Planning;
     editable: boolean;
+    presentation: boolean;
+    showTodoDivider: boolean;
 }) {
     const { languageTag, t } = useTranslations();
     const plan = planning.plans.find((item) => item.taskId === task.id);
@@ -347,7 +412,7 @@ function DeliverableTaskRows({
         });
         const rollback = () => {
             setSelected(confirmedSelected);
-            router.reload({ only: ['planning', 'gantt'] });
+            router.reload({ only: ['planning', 'gantt', 'kpis'] });
         };
         void form
             .put(upsertWeeklyPlanning.url(), {
@@ -356,7 +421,7 @@ function DeliverableTaskRows({
                     setConfirmedSelected(response.plan.selected);
                     setVersion(response.plan.version);
                     toast.success(t('The weekly planning was saved.'));
-                    router.reload({ only: ['planning', 'gantt'] });
+                    router.reload({ only: ['planning', 'gantt', 'kpis'] });
                 },
                 onHttpException: () => {
                     rollback();
@@ -382,7 +447,9 @@ function DeliverableTaskRows({
 
     return (
         <Fragment>
-            <TableRow className={selected ? 'bg-primary/5' : undefined}>
+            <TableRow
+                className={`${selected ? 'bg-primary/5' : ''} ${showTodoDivider ? 'border-t-4 border-t-border' : ''}`}
+            >
                 <TableCell>
                     {editable ? (
                         <Checkbox
@@ -415,9 +482,15 @@ function DeliverableTaskRows({
                     {task.owners.join(', ') || t('Unassigned')}
                 </TableCell>
                 <TableCell>
-                    <TaskStatus task={task} />
+                    {presentation ? (
+                        <StatusDot status={task.status} />
+                    ) : (
+                        <TaskStatus task={task} />
+                    )}
                 </TableCell>
-                <TableCell>{task.dueDate ?? '—'}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                    {hours(task.totalLoggedHours, languageTag)}
+                </TableCell>
                 <TableCell className="text-right tabular-nums">
                     {hours(task.estimateHours, languageTag)}
                 </TableCell>
@@ -430,13 +503,14 @@ function DeliverableTaskRows({
                 >
                     {hours(task.remainingHours, languageTag)}
                 </TableCell>
+                <TableCell>{task.dueDate ?? '—'}</TableCell>
                 <TableCell>
                     <Progress task={task} />
                 </TableCell>
             </TableRow>
             {editable && selected && (
                 <TableRow className="bg-muted/30">
-                    <TableCell colSpan={8}>
+                    <TableCell colSpan={9}>
                         <div className="flex flex-wrap items-end gap-3 py-2">
                             {planning.resources.map((resource) => (
                                 <label
@@ -529,6 +603,7 @@ export default function PmBoard({
     const [displayMode, setDisplayMode] = useState<'presentation' | 'edit'>(
         'presentation',
     );
+    const [printAll, setPrintAll] = useState(false);
     const [projectSelectorOpen, setProjectSelectorOpen] = useState(false);
     const [draftAllProjects, setDraftAllProjects] =
         useState(allProjectsSelected);
@@ -541,6 +616,13 @@ export default function PmBoard({
         projectIds: selectedProjectIds,
         includeInternal,
     };
+    const clearForm = useHttp<
+        ClearWeeklyPlanningPayload,
+        ClearWeeklyPlanningResponse
+    >(clearWeeklyPlanning(), {
+        project_id: selectedProject?.id ?? 0,
+        week_start: planning?.weekStart ?? '',
+    });
     const allPeriodHours =
         projects.reduce((total, project) => total + project.periodHours, 0) +
         internalOption.periodHours;
@@ -635,6 +717,90 @@ export default function PmBoard({
     };
     const canApplyProjectSelection =
         draftAllProjects || draftProjectIds.length > 0 || draftIncludeInternal;
+    const selectedPlans = planning?.plans.filter((plan) => plan.selected) ?? [];
+    const selectedPlannedHours = selectedPlans.reduce(
+        (total, plan) => total + plan.totalHours,
+        0,
+    );
+    const resourceScaleMax = Math.max(
+        1,
+        ...(planning?.resourceTotals.flatMap((total) => [
+            total.weeklyCapacityHours,
+            total.plannedHours,
+        ]) ?? []),
+    );
+    const taskLookup = new Map(upcomingTasks.map((task) => [task.id, task]));
+    const ganttMonthGroups =
+        gantt?.weeks.reduce<
+            Array<{ key: string; label: string; weeks: number }>
+        >((groups, week) => {
+            const latest = groups.at(-1);
+
+            if (latest?.key === week.monthKey) {
+                latest.weeks += 1;
+            } else {
+                groups.push({
+                    key: week.monthKey,
+                    label: week.monthLabel,
+                    weeks: 1,
+                });
+            }
+
+            return groups;
+        }, []) ?? [];
+    const sectionClass = (name: Section): string =>
+        `pm-board-print-section ${printAll && activeSection !== name ? 'pm-board-print-pending' : ''}`;
+    const clearPlanning = () => {
+        if (
+            !selectedProject ||
+            !planning ||
+            !window.confirm(
+                t(
+                    'Clear every selected task for this planning week? Allocated hours will be kept for later reuse.',
+                ),
+            )
+        ) {
+            return;
+        }
+
+        clearForm.setData({
+            project_id: selectedProject.id,
+            week_start: planning.weekStart,
+        });
+        void clearForm
+            .delete(clearWeeklyPlanning.url(), {
+                onSuccess: (response) => {
+                    toast.success(
+                        t(':count planned tasks were cleared.', {
+                            count: response.cleared,
+                        }),
+                    );
+                    router.reload({ only: ['planning', 'gantt', 'kpis'] });
+                },
+                onError: () => {
+                    toast.error(t('The weekly planning could not be cleared.'));
+                },
+                onNetworkError: () => {
+                    toast.error(t('Connection failed. Please try again.'));
+                },
+            })
+            .catch(() => undefined);
+    };
+
+    useEffect(() => {
+        if (!printAll) {
+            return;
+        }
+
+        const reset = () => setPrintAll(false);
+        const timeout = window.setTimeout(() => window.print(), 150);
+        window.addEventListener('afterprint', reset, { once: true });
+
+        return () => {
+            window.clearTimeout(timeout);
+            window.removeEventListener('afterprint', reset);
+        };
+    }, [printAll]);
 
     setLayoutProps({
         breadcrumbs: [{ title: t('PM boards'), href: pmBoardIndex() }],
@@ -643,8 +809,8 @@ export default function PmBoard({
     return (
         <>
             <Head title={t('PM boards')} />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-hidden p-4">
-                <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
+            <div className="pm-board-print-root flex h-full flex-1 flex-col gap-4 overflow-x-hidden p-4">
+                <div className="pm-board-no-print flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
                     <div className="space-y-2">
                         <div className="flex items-center gap-2">
                             <LayoutDashboard className="size-6" />
@@ -714,6 +880,23 @@ export default function PmBoard({
                                 </ToggleGroupItem>
                             )}
                         </ToggleGroup>
+                        <Button variant="outline" asChild>
+                            <a
+                                href={exportHref(
+                                    currentSelection,
+                                    period,
+                                    selectedPmId,
+                                )}
+                            >
+                                <Download /> {t('Export CSV')}
+                            </a>
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => setPrintAll(true)}
+                        >
+                            <Printer /> {t('Export PDF')}
+                        </Button>
                         {permissions.syncClickUp && (
                             <Button
                                 variant="outline"
@@ -733,8 +916,15 @@ export default function PmBoard({
                     </div>
                 </div>
 
+                <div className="pm-board-print-title hidden">
+                    <h1 className="text-2xl font-semibold">{t('PM boards')}</h1>
+                    <p className="text-sm text-muted-foreground">
+                        {selectionHeading} · {period.label}
+                    </p>
+                </div>
+
                 {(projects.length > 0 || internalOption.available) && (
-                    <div className="grid w-full gap-2 sm:max-w-md">
+                    <div className="pm-board-no-print grid w-full gap-2 sm:max-w-md">
                         <Label htmlFor="project-selector">
                             {t('Projects')}
                         </Label>
@@ -902,7 +1092,10 @@ export default function PmBoard({
                                         </Badge>
                                         {displayMode === 'edit' &&
                                             isDeliverables && (
-                                                <Badge variant="warning">
+                                                <Badge
+                                                    className="pm-board-no-print"
+                                                    variant="warning"
+                                                >
                                                     {t('Edit mode')}
                                                 </Badge>
                                             )}
@@ -933,7 +1126,7 @@ export default function PmBoard({
                                                 : ''}
                                     </p>
                                 </div>
-                                <div className="flex flex-wrap items-center gap-2">
+                                <div className="pm-board-no-print flex flex-wrap items-center gap-2">
                                     {isDeliverables ? (
                                         <Badge variant="secondary">
                                             {t('Weekly board')}
@@ -1003,23 +1196,63 @@ export default function PmBoard({
                             </CardContent>
                         </Card>
 
-                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                            {[
-                                [
-                                    t('Worked hours'),
-                                    hours(kpis.actualHours, languageTag),
-                                ],
-                                [
-                                    t('Estimate for worked tasks'),
-                                    hours(kpis.plannedHours, languageTag),
-                                ],
-                                [t('Worked tasks'), String(kpis.workedTasks)],
-                                [
-                                    t('Estimated active tasks'),
-                                    String(kpis.plannedTasks),
-                                ],
-                                [t('Active people'), String(kpis.activePeople)],
-                            ].map(([label, value]) => (
+                        <div
+                            className={`grid gap-3 sm:grid-cols-2 ${isDeliverables ? 'xl:grid-cols-7' : 'xl:grid-cols-5'}`}
+                        >
+                            {(isDeliverables
+                                ? [
+                                      [
+                                          t('Worked hours'),
+                                          hours(kpis.actualHours, languageTag),
+                                      ],
+                                      [
+                                          t('Estimate for worked tasks'),
+                                          hours(kpis.plannedHours, languageTag),
+                                      ],
+                                      [
+                                          t('Active tasks'),
+                                          String(kpis.activeTasks),
+                                      ],
+                                      [t('To do'), String(kpis.todoTasks)],
+                                      [
+                                          t('Selected next week'),
+                                          String(kpis.selectedTasks),
+                                      ],
+                                      [
+                                          t('Planned next week'),
+                                          hours(
+                                              kpis.plannedNextWeekHours,
+                                              languageTag,
+                                          ),
+                                      ],
+                                      [
+                                          t('Active people'),
+                                          String(kpis.activePeople),
+                                      ],
+                                  ]
+                                : [
+                                      [
+                                          t('Worked hours'),
+                                          hours(kpis.actualHours, languageTag),
+                                      ],
+                                      [
+                                          t('Estimate for worked tasks'),
+                                          hours(kpis.plannedHours, languageTag),
+                                      ],
+                                      [
+                                          t('Worked tasks'),
+                                          String(kpis.workedTasks),
+                                      ],
+                                      [
+                                          t('Estimated active tasks'),
+                                          String(kpis.plannedTasks),
+                                      ],
+                                      [
+                                          t('Active people'),
+                                          String(kpis.activePeople),
+                                      ],
+                                  ]
+                            ).map(([label, value]) => (
                                 <Card key={label}>
                                     <CardHeader className="pb-2">
                                         <CardDescription>
@@ -1042,7 +1275,7 @@ export default function PmBoard({
                                     setSection(value as Section);
                                 }
                             }}
-                            className="flex-wrap justify-start"
+                            className="pm-board-no-print flex-wrap justify-start"
                         >
                             <ToggleGroupItem value="summary">
                                 {t('Summary')}
@@ -1073,8 +1306,10 @@ export default function PmBoard({
                             )}
                         </ToggleGroup>
 
-                        {activeSection === 'summary' && (
-                            <div className="flex flex-col gap-4">
+                        {(activeSection === 'summary' || printAll) && (
+                            <div
+                                className={`${sectionClass('summary')} flex flex-col gap-4`}
+                            >
                                 <SummaryCharts
                                     data={summaryCharts}
                                     periodLabel={period.label}
@@ -1187,8 +1422,8 @@ export default function PmBoard({
                             </div>
                         )}
 
-                        {activeSection === 'worked' && (
-                            <Card>
+                        {(activeSection === 'worked' || printAll) && (
+                            <Card className={sectionClass('worked')}>
                                 <CardHeader>
                                     <CardTitle>{t('Worked tasks')}</CardTitle>
                                     <CardDescription>
@@ -1215,6 +1450,9 @@ export default function PmBoard({
                                                 </TableHead>
                                                 <TableHead className="text-right">
                                                     {t('Period')}
+                                                </TableHead>
+                                                <TableHead className="text-right">
+                                                    {t('Estimate')}
                                                 </TableHead>
                                                 <TableHead className="text-right">
                                                     {t('Total')}
@@ -1248,9 +1486,19 @@ export default function PmBoard({
                                                         </div>
                                                     </TableCell>
                                                     <TableCell>
-                                                        <TaskStatus
-                                                            task={task}
-                                                        />
+                                                        {displayMode ===
+                                                            'presentation' ||
+                                                        printAll ? (
+                                                            <StatusDot
+                                                                status={
+                                                                    task.status
+                                                                }
+                                                            />
+                                                        ) : (
+                                                            <TaskStatus
+                                                                task={task}
+                                                            />
+                                                        )}
                                                     </TableCell>
                                                     <TableCell className="text-sm text-muted-foreground">
                                                         {task.people
@@ -1268,6 +1516,12 @@ export default function PmBoard({
                                                     </TableCell>
                                                     <TableCell className="text-right tabular-nums">
                                                         {hours(
+                                                            task.estimateHours,
+                                                            languageTag,
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {hours(
                                                             task.totalLoggedHours,
                                                             languageTag,
                                                         )}
@@ -1277,9 +1531,51 @@ export default function PmBoard({
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
+                                            {workedTasks.length > 0 && (
+                                                <TableRow className="border-t-2 font-semibold">
+                                                    <TableCell colSpan={3}>
+                                                        {t('Total')}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {hours(
+                                                            workedTasks.reduce(
+                                                                (total, task) =>
+                                                                    total +
+                                                                    task.periodHours,
+                                                                0,
+                                                            ),
+                                                            languageTag,
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {hours(
+                                                            workedTasks.reduce(
+                                                                (total, task) =>
+                                                                    total +
+                                                                    (task.estimateHours ??
+                                                                        0),
+                                                                0,
+                                                            ),
+                                                            languageTag,
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {hours(
+                                                            workedTasks.reduce(
+                                                                (total, task) =>
+                                                                    total +
+                                                                    task.totalLoggedHours,
+                                                                0,
+                                                            ),
+                                                            languageTag,
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell />
+                                                </TableRow>
+                                            )}
                                             {workedTasks.length === 0 && (
                                                 <EmptyRow
-                                                    columns={6}
+                                                    columns={7}
                                                     label={t(
                                                         'No time entries in the selected period.',
                                                     )}
@@ -1291,8 +1587,8 @@ export default function PmBoard({
                             </Card>
                         )}
 
-                        {activeSection === 'upcoming' && (
-                            <Card>
+                        {(activeSection === 'upcoming' || printAll) && (
+                            <Card className={sectionClass('upcoming')}>
                                 <CardHeader>
                                     <CardTitle>
                                         {isDeliverables
@@ -1315,6 +1611,43 @@ export default function PmBoard({
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="overflow-x-auto">
+                                    {isDeliverables && planning && (
+                                        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
+                                            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+                                                <span>
+                                                    <strong>
+                                                        {kpis.selectedTasks}
+                                                    </strong>{' '}
+                                                    {t('selected tasks')}
+                                                </span>
+                                                <span>
+                                                    <strong>
+                                                        {hours(
+                                                            kpis.plannedNextWeekHours,
+                                                            languageTag,
+                                                        )}
+                                                    </strong>{' '}
+                                                    {t('planned next week')}
+                                                </span>
+                                            </div>
+                                            {displayMode === 'edit' &&
+                                                permissions.managePlanning &&
+                                                kpis.selectedTasks > 0 && (
+                                                    <Button
+                                                        className="pm-board-no-print"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        disabled={
+                                                            clearForm.processing
+                                                        }
+                                                        onClick={clearPlanning}
+                                                    >
+                                                        <Trash2 />{' '}
+                                                        {t('Clear selection')}
+                                                    </Button>
+                                                )}
+                                        </div>
+                                    )}
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
@@ -1332,14 +1665,19 @@ export default function PmBoard({
                                                 <TableHead>
                                                     {t('Status')}
                                                 </TableHead>
-                                                <TableHead>
-                                                    {t('Due date')}
-                                                </TableHead>
+                                                {isDeliverables && (
+                                                    <TableHead className="text-right">
+                                                        {t('Logged')}
+                                                    </TableHead>
+                                                )}
                                                 <TableHead className="text-right">
                                                     {t('Estimated')}
                                                 </TableHead>
                                                 <TableHead className="text-right">
                                                     {t('Remaining')}
+                                                </TableHead>
+                                                <TableHead>
+                                                    {t('Due date')}
                                                 </TableHead>
                                                 <TableHead>
                                                     {t('Progress')}
@@ -1350,21 +1688,43 @@ export default function PmBoard({
                                             {isDeliverables &&
                                             planning &&
                                             selectedProject
-                                                ? upcomingTasks.map((task) => (
-                                                      <DeliverableTaskRows
-                                                          key={`${task.id}-${planning.plans.find((plan) => plan.taskId === task.id)?.updatedAt ?? 'new'}`}
-                                                          task={task}
-                                                          projectId={
-                                                              selectedProject.id
-                                                          }
-                                                          planning={planning}
-                                                          editable={
-                                                              displayMode ===
-                                                                  'edit' &&
-                                                              permissions.managePlanning
-                                                          }
-                                                      />
-                                                  ))
+                                                ? upcomingTasks.map(
+                                                      (task, index) => (
+                                                          <DeliverableTaskRows
+                                                              key={`${task.id}-${planning.plans.find((plan) => plan.taskId === task.id)?.updatedAt ?? 'new'}`}
+                                                              task={task}
+                                                              projectId={
+                                                                  selectedProject.id
+                                                              }
+                                                              planning={
+                                                                  planning
+                                                              }
+                                                              editable={
+                                                                  displayMode ===
+                                                                      'edit' &&
+                                                                  permissions.managePlanning &&
+                                                                  !printAll
+                                                              }
+                                                              presentation={
+                                                                  displayMode ===
+                                                                      'presentation' ||
+                                                                  printAll
+                                                              }
+                                                              showTodoDivider={
+                                                                  task.statusGroup ===
+                                                                      '1-todo' &&
+                                                                  (index ===
+                                                                      0 ||
+                                                                      upcomingTasks[
+                                                                          index -
+                                                                              1
+                                                                      ]
+                                                                          ?.statusGroup !==
+                                                                          '1-todo')
+                                                              }
+                                                          />
+                                                      ),
+                                                  )
                                                 : upcomingTasks.map((task) => (
                                                       <TableRow key={task.id}>
                                                           <TableCell>
@@ -1399,19 +1759,31 @@ export default function PmBoard({
                                                                   )}
                                                           </TableCell>
                                                           <TableCell>
-                                                              <TaskStatus
-                                                                  task={task}
-                                                              />
-                                                          </TableCell>
-                                                          <TableCell>
-                                                              {task.dueDate ??
-                                                                  '—'}
+                                                              {displayMode ===
+                                                                  'presentation' ||
+                                                              printAll ? (
+                                                                  <StatusDot
+                                                                      status={
+                                                                          task.status
+                                                                      }
+                                                                  />
+                                                              ) : (
+                                                                  <TaskStatus
+                                                                      task={
+                                                                          task
+                                                                      }
+                                                                  />
+                                                              )}
                                                           </TableCell>
                                                           <TableCell className="text-right tabular-nums">
                                                               {hours(
                                                                   task.estimateHours,
                                                                   languageTag,
                                                               )}
+                                                          </TableCell>
+                                                          <TableCell>
+                                                              {task.dueDate ??
+                                                                  '—'}
                                                           </TableCell>
                                                           <TableCell
                                                               className={
@@ -1435,7 +1807,7 @@ export default function PmBoard({
                                             {upcomingTasks.length === 0 && (
                                                 <EmptyRow
                                                     columns={
-                                                        isDeliverables ? 8 : 7
+                                                        isDeliverables ? 9 : 7
                                                     }
                                                     label={t(
                                                         'No active tasks.',
@@ -1448,8 +1820,9 @@ export default function PmBoard({
                             </Card>
                         )}
 
-                        {activeSection === 'people' && (
-                            <Card>
+                        {(activeSection === 'people' ||
+                            (printAll && !isDeliverables)) && (
+                            <Card className={sectionClass('people')}>
                                 <CardHeader>
                                     <CardTitle>{t('Active team')}</CardTitle>
                                     <CardDescription>
@@ -1504,42 +1877,34 @@ export default function PmBoard({
                             </Card>
                         )}
 
-                        {activeSection === 'planning' && planning && (
-                            <Card>
-                                <CardHeader>
-                                    <CardTitle>
-                                        {t('Resource planning — :date', {
-                                            date: planning.weekStart,
-                                        })}
-                                    </CardTitle>
-                                    <CardDescription>
-                                        {t(
-                                            'Capacity is configured per person. Totals come from hours assigned to selected in-progress tasks.',
-                                        )}
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="overflow-x-auto">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>
-                                                    {t('Resource')}
-                                                </TableHead>
-                                                <TableHead>
-                                                    {t('Role')}
-                                                </TableHead>
-                                                <TableHead className="text-right">
-                                                    {t('Capacity')}
-                                                </TableHead>
-                                                <TableHead className="text-right">
-                                                    {t('Planned')}
-                                                </TableHead>
-                                                <TableHead className="text-right">
-                                                    {t('Available hours')}
-                                                </TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
+                        {(activeSection === 'planning' || printAll) &&
+                            planning && (
+                                <Card className={sectionClass('planning')}>
+                                    <CardHeader>
+                                        <CardTitle>
+                                            {t('Resource planning — :date', {
+                                                date: planning.weekStart,
+                                            })}
+                                        </CardTitle>
+                                        <CardDescription>
+                                            {t(
+                                                'Capacity is configured per person. Totals come from hours assigned to selected in-progress tasks.',
+                                            )}
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-6">
+                                        <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-lg border bg-muted/30 p-3">
+                                            <span className="text-sm text-muted-foreground">
+                                                {t('Total planned')}
+                                            </span>
+                                            <strong className="text-2xl tabular-nums">
+                                                {hours(
+                                                    selectedPlannedHours,
+                                                    languageTag,
+                                                )}
+                                            </strong>
+                                        </div>
+                                        <div className="space-y-5">
                                             {planning.resources.map(
                                                 (resource) => {
                                                     const total =
@@ -1548,69 +1913,211 @@ export default function PmBoard({
                                                                 item.personId ===
                                                                 resource.id,
                                                         );
-                                                    const overloaded =
-                                                        (total?.remainingHours ??
-                                                            resource.weeklyCapacityHours) <
+                                                    const planned =
+                                                        total?.plannedHours ??
                                                         0;
+                                                    const capacity =
+                                                        total?.weeklyCapacityHours ??
+                                                        resource.weeklyCapacityHours;
+                                                    const remaining =
+                                                        total?.remainingHours ??
+                                                        capacity;
+                                                    const overloaded =
+                                                        remaining < 0;
+                                                    const plannedWidth =
+                                                        Math.min(
+                                                            100,
+                                                            (planned /
+                                                                resourceScaleMax) *
+                                                                100,
+                                                        );
+                                                    const capacityPosition =
+                                                        Math.min(
+                                                            100,
+                                                            (capacity /
+                                                                resourceScaleMax) *
+                                                                100,
+                                                        );
 
                                                     return (
-                                                        <TableRow
+                                                        <div
                                                             key={resource.id}
+                                                            className="grid gap-2 lg:grid-cols-[14rem_1fr_15rem] lg:items-center"
                                                         >
-                                                            <TableCell className="font-medium">
-                                                                {resource.name}
-                                                            </TableCell>
-                                                            <TableCell className="text-muted-foreground">
-                                                                {resource.jobRole ??
-                                                                    '—'}
-                                                            </TableCell>
-                                                            <TableCell className="text-right tabular-nums">
-                                                                {hours(
-                                                                    resource.weeklyCapacityHours,
-                                                                    languageTag,
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell className="text-right tabular-nums">
-                                                                {hours(
-                                                                    total?.plannedHours ??
-                                                                        0,
-                                                                    languageTag,
-                                                                )}
-                                                            </TableCell>
-                                                            <TableCell
-                                                                className={
-                                                                    overloaded
-                                                                        ? 'text-right text-destructive tabular-nums'
-                                                                        : 'text-right tabular-nums'
-                                                                }
+                                                            <div>
+                                                                <div className="font-medium">
+                                                                    {
+                                                                        resource.name
+                                                                    }
+                                                                </div>
+                                                                <div className="text-xs text-muted-foreground">
+                                                                    {resource.jobRole ??
+                                                                        '—'}
+                                                                </div>
+                                                            </div>
+                                                            <div>
+                                                                <div className="relative h-5 overflow-visible rounded bg-muted">
+                                                                    <div
+                                                                        className={`h-full rounded ${overloaded ? 'bg-destructive' : 'bg-primary'}`}
+                                                                        style={{
+                                                                            width: `${plannedWidth}%`,
+                                                                        }}
+                                                                    />
+                                                                    <div
+                                                                        className="absolute top-[-3px] h-7 w-0.5 bg-foreground"
+                                                                        style={{
+                                                                            left: `${capacityPosition}%`,
+                                                                        }}
+                                                                        title={t(
+                                                                            'Capacity: :hours',
+                                                                            {
+                                                                                hours: hours(
+                                                                                    capacity,
+                                                                                    languageTag,
+                                                                                ),
+                                                                            },
+                                                                        )}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                            <div
+                                                                className={`text-sm tabular-nums ${overloaded ? 'text-destructive' : ''}`}
                                                             >
+                                                                <strong>
+                                                                    {hours(
+                                                                        planned,
+                                                                        languageTag,
+                                                                    )}
+                                                                </strong>{' '}
+                                                                /{' '}
                                                                 {hours(
-                                                                    total?.remainingHours ??
-                                                                        resource.weeklyCapacityHours,
+                                                                    capacity,
+                                                                    languageTag,
+                                                                )}{' '}
+                                                                ·{' '}
+                                                                {(
+                                                                    total?.utilizationPercent ??
+                                                                    0
+                                                                ).toLocaleString(
                                                                     languageTag,
                                                                 )}
-                                                            </TableCell>
-                                                        </TableRow>
+                                                                % ·{' '}
+                                                                {t('available')}
+                                                                :{' '}
+                                                                {hours(
+                                                                    remaining,
+                                                                    languageTag,
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     );
                                                 },
                                             )}
                                             {planning.resources.length ===
                                                 0 && (
-                                                <EmptyRow
-                                                    columns={5}
-                                                    label={t(
+                                                <p className="py-8 text-center text-sm text-muted-foreground">
+                                                    {t(
                                                         'No active internal resources.',
                                                     )}
-                                                />
+                                                </p>
                                             )}
-                                        </TableBody>
-                                    </Table>
-                                </CardContent>
-                            </Card>
-                        )}
+                                        </div>
 
-                        {activeSection === 'gantt' && gantt && (
-                            <Card>
+                                        <div className="space-y-3">
+                                            <h3 className="font-semibold">
+                                                {t('Selected task allocations')}
+                                            </h3>
+                                            <div className="overflow-x-auto">
+                                                <Table>
+                                                    <TableHeader>
+                                                        <TableRow>
+                                                            <TableHead>
+                                                                {t('Task')}
+                                                            </TableHead>
+                                                            <TableHead>
+                                                                {t(
+                                                                    'Allocations',
+                                                                )}
+                                                            </TableHead>
+                                                            <TableHead className="text-right">
+                                                                {t('Planned')}
+                                                            </TableHead>
+                                                        </TableRow>
+                                                    </TableHeader>
+                                                    <TableBody>
+                                                        {selectedPlans.map(
+                                                            (plan) => {
+                                                                const task =
+                                                                    taskLookup.get(
+                                                                        plan.taskId,
+                                                                    );
+
+                                                                return (
+                                                                    <TableRow
+                                                                        key={
+                                                                            plan.taskId
+                                                                        }
+                                                                    >
+                                                                        <TableCell className="font-medium">
+                                                                            {task ? (
+                                                                                <a
+                                                                                    href={
+                                                                                        task.url
+                                                                                    }
+                                                                                    target="_blank"
+                                                                                    rel="noreferrer"
+                                                                                    className="hover:underline"
+                                                                                >
+                                                                                    {
+                                                                                        task.name
+                                                                                    }
+                                                                                </a>
+                                                                            ) : (
+                                                                                `#${plan.taskId}`
+                                                                            )}
+                                                                        </TableCell>
+                                                                        <TableCell className="text-muted-foreground">
+                                                                            {plan.allocations
+                                                                                .map(
+                                                                                    (
+                                                                                        allocation,
+                                                                                    ) =>
+                                                                                        `${allocation.name} · ${hours(allocation.hours, languageTag)}`,
+                                                                                )
+                                                                                .join(
+                                                                                    ', ',
+                                                                                ) ||
+                                                                                '—'}
+                                                                        </TableCell>
+                                                                        <TableCell className="text-right tabular-nums">
+                                                                            {hours(
+                                                                                plan.totalHours,
+                                                                                languageTag,
+                                                                            )}
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                );
+                                                            },
+                                                        )}
+                                                        {selectedPlans.length ===
+                                                            0 && (
+                                                            <EmptyRow
+                                                                columns={3}
+                                                                label={t(
+                                                                    'No tasks selected for next week.',
+                                                                )}
+                                                            />
+                                                        )}
+                                                    </TableBody>
+                                                </Table>
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            )}
+
+                        {(activeSection === 'gantt' || printAll) && gantt && (
+                            <Card className={sectionClass('gantt')}>
                                 <CardHeader>
                                     <CardTitle>
                                         {t('Deliverables Gantt')}
@@ -1622,22 +2129,90 @@ export default function PmBoard({
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="overflow-x-auto">
-                                    <Table>
+                                    <Table className="pm-board-gantt-table min-w-max">
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHead className="sticky left-0 min-w-72 bg-card">
+                                                <TableHead
+                                                    rowSpan={2}
+                                                    className="min-w-32"
+                                                >
+                                                    {t('Module')}
+                                                </TableHead>
+                                                <TableHead
+                                                    rowSpan={2}
+                                                    className="min-w-72"
+                                                >
                                                     {t('Task')}
                                                 </TableHead>
+                                                <TableHead
+                                                    rowSpan={2}
+                                                    className="min-w-24 text-right"
+                                                >
+                                                    {t('Estimate')}
+                                                </TableHead>
+                                                <TableHead
+                                                    rowSpan={2}
+                                                    className="min-w-28"
+                                                >
+                                                    {t('Start')}
+                                                </TableHead>
+                                                <TableHead
+                                                    rowSpan={2}
+                                                    className="min-w-28"
+                                                >
+                                                    {t('End')}
+                                                </TableHead>
+                                                <TableHead
+                                                    rowSpan={2}
+                                                    className="min-w-28"
+                                                >
+                                                    {t('Status')}
+                                                </TableHead>
+                                                <TableHead
+                                                    rowSpan={2}
+                                                    className="min-w-24 text-right"
+                                                >
+                                                    {t('Progress')}
+                                                </TableHead>
+                                                {ganttMonthGroups.map(
+                                                    (group) => (
+                                                        <TableHead
+                                                            key={group.key}
+                                                            colSpan={
+                                                                group.weeks
+                                                            }
+                                                            className="border-l text-center font-semibold"
+                                                        >
+                                                            {group.label}
+                                                        </TableHead>
+                                                    ),
+                                                )}
+                                            </TableRow>
+                                            <TableRow>
                                                 {gantt.weeks.map((week) => (
                                                     <TableHead
                                                         key={week.key}
                                                         className={
                                                             week.isCurrent
-                                                                ? 'min-w-24 border-x-2 border-destructive text-center'
-                                                                : 'min-w-24 text-center'
+                                                                ? 'min-w-20 border-x-2 border-destructive px-2 text-center'
+                                                                : 'min-w-20 px-2 text-center'
                                                         }
+                                                        title={week.label}
                                                     >
-                                                        {week.label}
+                                                        <div>
+                                                            {new Date(
+                                                                `${week.start}T00:00:00`,
+                                                            ).toLocaleDateString(
+                                                                languageTag,
+                                                                {
+                                                                    day: '2-digit',
+                                                                    month: 'short',
+                                                                },
+                                                            )}
+                                                        </div>
+                                                        <div className="text-[10px] text-muted-foreground">
+                                                            CW {week.isoWeek}
+                                                        </div>
                                                     </TableHead>
                                                 ))}
                                             </TableRow>
@@ -1645,7 +2220,10 @@ export default function PmBoard({
                                         <TableBody>
                                             {gantt.rows.map((row) => (
                                                 <TableRow key={row.id}>
-                                                    <TableCell className="sticky left-0 bg-card">
+                                                    <TableCell className="font-medium">
+                                                        {row.module}
+                                                    </TableCell>
+                                                    <TableCell>
                                                         <div className="flex items-center gap-2">
                                                             {row.selected && (
                                                                 <Star className="size-4 fill-warning text-warning" />
@@ -1663,33 +2241,48 @@ export default function PmBoard({
                                                             {row.owners.join(
                                                                 ', ',
                                                             ) ||
-                                                                t(
-                                                                    'Unassigned',
-                                                                )}{' '}
-                                                            ·{' '}
-                                                            {hours(
-                                                                row.estimateHours,
-                                                                languageTag,
-                                                            )}{' '}
-                                                            ·{' '}
-                                                            {row.progress ===
-                                                            null
-                                                                ? '—'
-                                                                : `${row.progress}%`}
+                                                                t('Unassigned')}
                                                         </div>
                                                     </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {hours(
+                                                            row.estimateHours,
+                                                            languageTag,
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="tabular-nums">
+                                                        {row.startDate ?? '—'}
+                                                    </TableCell>
+                                                    <TableCell className="tabular-nums">
+                                                        {row.dueDate ?? '—'}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-2">
+                                                            <StatusDot
+                                                                status={
+                                                                    row.status
+                                                                }
+                                                            />
+                                                            <span className="text-xs">
+                                                                {row.status}
+                                                            </span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="text-right tabular-nums">
+                                                        {row.progress === null
+                                                            ? '—'
+                                                            : `${row.progress}%`}
+                                                    </TableCell>
                                                     {gantt.weeks.map((week) => {
-                                                        const start =
-                                                            row.startDate ??
-                                                            row.dueDate;
-                                                        const end =
-                                                            row.dueDate ??
-                                                            row.startDate;
                                                         const active =
-                                                            start !== null &&
-                                                            end !== null &&
-                                                            start <= week.end &&
-                                                            end >= week.start;
+                                                            row.startDate !==
+                                                                null &&
+                                                            row.dueDate !==
+                                                                null &&
+                                                            row.startDate <=
+                                                                week.end &&
+                                                            row.dueDate >=
+                                                                week.start;
 
                                                         return (
                                                             <TableCell
@@ -1702,8 +2295,8 @@ export default function PmBoard({
                                                             >
                                                                 {active && (
                                                                     <div
-                                                                        className={`h-6 rounded ${ganttCellClass(row.status)}`}
-                                                                        title={`${row.status}: ${start} – ${end}`}
+                                                                        className={`h-5 rounded ${ganttCellClass(row.status)}`}
+                                                                        title={`${row.status}: ${row.startDate} – ${row.dueDate}`}
                                                                     />
                                                                 )}
                                                             </TableCell>
@@ -1714,7 +2307,7 @@ export default function PmBoard({
                                             {gantt.rows.length === 0 && (
                                                 <EmptyRow
                                                     columns={
-                                                        gantt.weeks.length + 1
+                                                        gantt.weeks.length + 7
                                                     }
                                                     label={t(
                                                         'Tasks do not have start/deadline dates yet.',

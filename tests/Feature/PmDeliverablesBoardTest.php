@@ -70,7 +70,25 @@ it('adds weekly planning resources and gantt data to a deliverables board', func
     ]);
     $project = Project::factory()->create([
         'contract_type' => ProjectBoardTemplate::Deliverables,
-        'board_config' => ['excluded_task_ids' => []],
+        'board_config' => [
+            'excluded_task_ids' => [],
+            'gantt_modules' => ['deliverable-included' => 'Backend'],
+        ],
+    ]);
+    $laterTask = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_task_id' => 'later-deliverable',
+        'name' => '[Forms] Integrare formulare',
+        'status' => 'to do',
+        'start_at' => '2026-08-31 09:00:00',
+        'due_at' => '2026-09-02 18:00:00',
+    ]);
+    $undatedTask = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_task_id' => 'missing-start',
+        'status' => 'to do',
+        'start_at' => null,
+        'due_at' => '2026-09-04 18:00:00',
     ]);
     $task = ClickUpTask::factory()->create([
         'project_id' => $project,
@@ -137,14 +155,29 @@ it('adds weekly planning resources and gantt data to a deliverables board', func
             'plannedHours' => 8,
             'weeklyCapacityHours' => 40,
             'remainingHours' => 32,
+            'utilizationPercent' => 20,
         ])
         ->and($response->inertiaProps('gantt.weeks'))->not->toBeEmpty()
         ->and($ganttRow)->toMatchArray([
             'id' => $task->id,
+            'module' => 'Backend',
             'status' => 'in progress',
             'startDate' => '2026-07-06',
             'dueDate' => '2026-07-24',
-        ]);
+        ])
+        ->and(collect($response->inertiaProps('gantt.rows'))->pluck('id'))
+        ->toContain($task->id, $laterTask->id)
+        ->not->toContain($undatedTask->id)
+        ->and(collect($response->inertiaProps('gantt.weeks'))->last())
+        ->toMatchArray([
+            'key' => '2026-08-31',
+            'isoWeek' => 36,
+            'monthKey' => '2026-08',
+        ])
+        ->and($response->inertiaProps('kpis.selectedTasks'))->toBe(1)
+        ->and($response->inertiaProps('kpis.plannedNextWeekHours'))->toBe(8)
+        ->and($response->inertiaProps('kpis.activeTasks'))->toBe(1)
+        ->and($response->inertiaProps('kpis.todoTasks'))->toBe(2);
 });
 
 it('excludes configured tasks only from upcoming and planning while retaining worked history', function () {

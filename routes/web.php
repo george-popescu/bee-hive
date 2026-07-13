@@ -32,12 +32,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('pm-board', [PmBoardController::class, 'index'])
         ->middleware('can:'.PermissionName::ViewPmBoards->value)
         ->name('pm_board.index');
+    Route::get('pm-board/export.csv', [PmBoardController::class, 'export'])
+        ->middleware('can:'.PermissionName::ViewPmBoards->value)
+        ->name('pm_board.export');
     Route::post('clickup/sync', [ClickUpSyncController::class, 'store'])
         ->middleware('can:'.PermissionName::SyncClickUp->value)
         ->name('clickup_sync.store');
     Route::put('weekly-planning', [WeeklyPlanningController::class, 'upsert'])
         ->middleware('can:'.PermissionName::ManagePmPlanning->value)
         ->name('weekly_planning.upsert');
+    Route::delete('weekly-planning', [WeeklyPlanningController::class, 'clear'])
+        ->middleware('can:'.PermissionName::ManagePmPlanning->value)
+        ->name('weekly_planning.clear');
     Route::get('admin', AdminController::class)->name('admin.index');
     Route::middleware('throttle:60,1')->group(function () {
         Route::put('admin/people/{person}', [AdminPersonController::class, 'update'])

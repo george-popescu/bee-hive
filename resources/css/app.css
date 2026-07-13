@@ -153,3 +153,84 @@
         @apply bg-background text-foreground;
     }
 }
+
+.pm-board-print-pending {
+    display: none;
+}
+
+@media print {
+    @page {
+        size: A3 landscape;
+        margin: 10mm;
+    }
+
+    body * {
+        visibility: hidden;
+    }
+
+    .pm-board-print-root,
+    .pm-board-print-root * {
+        visibility: visible;
+        print-color-adjust: exact;
+        -webkit-print-color-adjust: exact;
+    }
+
+    .pm-board-print-root {
+        position: absolute;
+        inset: 0 auto auto 0;
+        width: 100%;
+        height: auto !important;
+        overflow: visible !important;
+        background: white;
+        color: black;
+        padding: 0 !important;
+    }
+
+    .pm-board-no-print {
+        display: none !important;
+    }
+
+    .pm-board-print-title,
+    .pm-board-print-pending {
+        display: block !important;
+    }
+
+    .pm-board-print-section {
+        break-before: page;
+        overflow: visible !important;
+    }
+
+    .pm-board-print-section:first-of-type {
+        break-before: auto;
+    }
+
+    .pm-board-print-section [data-slot='card-content'],
+    .pm-board-print-section .overflow-x-auto {
+        overflow: visible !important;
+    }
+
+    .pm-board-print-section table {
+        font-size: 9px;
+    }
+
+    .pm-board-print-section thead {
+        display: table-header-group;
+    }
+
+    .pm-board-print-section tr,
+    .pm-board-print-section [data-slot='card'] {
+        break-inside: avoid;
+    }
+
+    .pm-board-gantt-table {
+        min-width: 0 !important;
+        width: 100% !important;
+        font-size: 7px !important;
+    }
+
+    .pm-board-gantt-table th,
+    .pm-board-gantt-table td {
+        min-width: 0 !important;
+        padding: 3px !important;
+    }
+}

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ClearWeeklyPlanningRequest;
 use App\Http\Requests\UpsertWeeklyPlanningRequest;
 use App\Services\PmBoard\WeeklyPlanningService;
 use Illuminate\Http\JsonResponse;
@@ -21,6 +22,13 @@ class WeeklyPlanningController extends Controller
                 'version' => $plan->version,
                 'updatedAt' => $plan->updated_at?->toIso8601String(),
             ],
+        ]);
+    }
+
+    public function clear(ClearWeeklyPlanningRequest $request): JsonResponse
+    {
+        return response()->json([
+            'cleared' => $this->planning->clear($request->payload(), $request->user()),
         ]);
     }
 }

@@ -33,6 +33,7 @@ return [
         'deliverables_template' => 'Deliverables / Fixed',
         'planning_conflict' => 'The planning was changed by another user. Reload the page.',
         'week_must_start_on_monday' => 'The week must start on Monday.',
+        'general_module' => 'General',
     ],
     'adjustments' => [
         'created' => 'The adjustment was recorded.',
