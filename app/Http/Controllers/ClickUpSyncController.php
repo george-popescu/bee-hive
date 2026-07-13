@@ -21,6 +21,6 @@ class ClickUpSyncController extends Controller
             triggeredBy: $request->user()->getKey(),
         ));
 
-        return back(status: 303)->with('success', 'Sincronizarea ClickUp a fost pusă în coadă.');
+        return back(status: 303)->with('success', __('messages.clickup_sync.queued'));
     }
 }

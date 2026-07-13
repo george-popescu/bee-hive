@@ -73,7 +73,7 @@ class ProfileController extends Controller
 
             if ($adminIds->contains($user->getKey()) && $adminIds->count() <= 1) {
                 throw ValidationException::withMessages([
-                    'password' => 'Ultimul administrator nu își poate șterge contul.',
+                    'password' => __('messages.admin.last_admin_cannot_delete_account'),
                 ]);
             }
 

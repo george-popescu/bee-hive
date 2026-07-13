@@ -138,11 +138,11 @@ class DashboardData
     private function scope(User $user): array
     {
         if ($user->can(PermissionName::ViewManagement->value)) {
-            return [null, null, ['label' => 'Toată compania', 'mode' => 'company']];
+            return [null, null, ['label' => __('messages.dashboard.company_scope'), 'mode' => 'company']];
         }
 
         if ($user->can(PermissionName::ViewTeamLead->value)) {
-            return [$this->teamLeadScope->personIds($user), null, ['label' => 'Echipa mea', 'mode' => 'team']];
+            return [$this->teamLeadScope->personIds($user), null, ['label' => __('messages.dashboard.team_scope'), 'mode' => 'team']];
         }
 
         if ($user->can(PermissionName::ViewPmBoards->value)) {
@@ -151,11 +151,11 @@ class DashboardData
             return [
                 $this->projectPeople($projectIds),
                 $projectIds,
-                ['label' => 'Proiectele mele', 'mode' => 'projects'],
+                ['label' => __('messages.dashboard.projects_scope'), 'mode' => 'projects'],
             ];
         }
 
-        return [[], [], ['label' => 'Fără scope operațional', 'mode' => 'empty']];
+        return [[], [], ['label' => __('messages.dashboard.empty_scope'), 'mode' => 'empty']];
     }
 
     /**
@@ -482,7 +482,7 @@ class DashboardData
                 return [
                     'id' => (int) $id,
                     'label' => $project === null
-                        ? 'Activități interne'
+                        ? __('messages.common.internal_activities')
                         : trim($project->client.' — '.$project->name, ' —'),
                     'plannedHours' => $planned,
                     'actualHours' => $actual,
@@ -517,16 +517,16 @@ class DashboardData
         if ($over > 0) {
             $alerts[] = [
                 'tone' => 'danger',
-                'title' => $over === 1 ? '1 persoană este supra-alocată' : "$over persoane sunt supra-alocate",
-                'detail' => 'Planificarea depășește 105% din capacitatea disponibilă.',
+                'title' => trans_choice('messages.dashboard.overallocated', $over, ['count' => $over]),
+                'detail' => __('messages.dashboard.overallocated_detail'),
             ];
         }
 
         if ($under > 0) {
             $alerts[] = [
                 'tone' => 'warning',
-                'title' => $under === 1 ? '1 persoană are disponibilitate mare' : "$under persoane au disponibilitate mare",
-                'detail' => 'Planificarea este sub 70% din capacitatea disponibilă.',
+                'title' => trans_choice('messages.dashboard.underallocated', $under, ['count' => $under]),
+                'detail' => __('messages.dashboard.underallocated_detail'),
             ];
         }
 

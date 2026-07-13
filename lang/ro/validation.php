@@ -1,0 +1,56 @@
+<?php
+
+return [
+    'accepted' => 'Câmpul :attribute trebuie acceptat.',
+    'array' => 'Câmpul :attribute trebuie să fie un array.',
+    'between' => [
+        'numeric' => 'Câmpul :attribute trebuie să fie între :min și :max.',
+        'string' => 'Câmpul :attribute trebuie să aibă între :min și :max caractere.',
+    ],
+    'boolean' => 'Câmpul :attribute trebuie să fie adevărat sau fals.',
+    'confirmed' => 'Confirmarea câmpului :attribute nu corespunde.',
+    'current_password' => 'Parola este incorectă.',
+    'date' => 'Câmpul :attribute trebuie să conțină o dată validă.',
+    'date_format' => 'Câmpul :attribute trebuie să respecte formatul :format.',
+    'distinct' => 'Câmpul :attribute conține o valoare duplicată.',
+    'email' => 'Câmpul :attribute trebuie să conțină o adresă de email validă.',
+    'exists' => 'Valoarea selectată pentru :attribute nu este validă.',
+    'in' => 'Valoarea selectată pentru :attribute nu este validă.',
+    'integer' => 'Câmpul :attribute trebuie să fie un număr întreg.',
+    'max' => [
+        'array' => 'Câmpul :attribute nu poate avea mai mult de :max elemente.',
+        'numeric' => 'Câmpul :attribute nu poate fi mai mare de :max.',
+        'string' => 'Câmpul :attribute nu poate avea mai mult de :max caractere.',
+    ],
+    'min' => [
+        'array' => 'Câmpul :attribute trebuie să aibă cel puțin :min elemente.',
+        'numeric' => 'Câmpul :attribute trebuie să fie cel puțin :min.',
+        'string' => 'Câmpul :attribute trebuie să aibă cel puțin :min caractere.',
+    ],
+    'not_in' => 'Valoarea selectată pentru :attribute nu este validă.',
+    'numeric' => 'Câmpul :attribute trebuie să fie un număr.',
+    'password' => [
+        'letters' => 'Câmpul :attribute trebuie să conțină cel puțin o literă.',
+        'mixed' => 'Câmpul :attribute trebuie să conțină cel puțin o literă mare și una mică.',
+        'numbers' => 'Câmpul :attribute trebuie să conțină cel puțin o cifră.',
+        'symbols' => 'Câmpul :attribute trebuie să conțină cel puțin un simbol.',
+        'uncompromised' => 'Valoarea câmpului :attribute a apărut într-o breșă de date. Alege altă valoare.',
+    ],
+    'present' => 'Câmpul :attribute trebuie să fie prezent.',
+    'required' => 'Câmpul :attribute este obligatoriu.',
+    'required_without' => 'Câmpul :attribute este obligatoriu când :values lipsește.',
+    'string' => 'Câmpul :attribute trebuie să fie un text.',
+    'unique' => 'Valoarea câmpului :attribute a fost deja folosită.',
+
+    'attributes' => [
+        'code' => 'cod',
+        'current_password' => 'parola curentă',
+        'email' => 'email',
+        'hours_delta' => 'ore',
+        'locale' => 'limbă',
+        'name' => 'nume',
+        'password' => 'parolă',
+        'password_confirmation' => 'confirmarea parolei',
+        'reason' => 'motiv',
+    ],
+];

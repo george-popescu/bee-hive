@@ -29,7 +29,7 @@ class AdminPersonController extends Controller
             return response()->json(['updated' => true]);
         }
 
-        return back(status: 303)->with('success', 'Configurația persoanei a fost actualizată.');
+        return back(status: 303)->with('success', __('messages.admin.person_updated'));
     }
 
     /** @return array<string, bool|float|string|null> */

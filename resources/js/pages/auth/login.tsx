@@ -1,4 +1,4 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, setLayoutProps } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import PasskeyVerify from '@/components/passkey-verify';
 import PasswordInput from '@/components/password-input';
@@ -9,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { useTranslations } from '@/hooks/use-translations';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
 
@@ -18,9 +19,18 @@ type Props = {
 };
 
 export default function Login({ status, canResetPassword }: Props) {
+    const { t } = useTranslations();
+
+    setLayoutProps({
+        title: t('Welcome back'),
+        description: t(
+            'Sign in to BEE CODED HiveOps with your internal account.',
+        ),
+    });
+
     return (
         <>
-            <Head title="Autentificare" />
+            <Head title={t('Log in')} />
 
             <PasskeyVerify />
 
@@ -33,7 +43,9 @@ export default function Login({ status, canResetPassword }: Props) {
                     <>
                         <div className="flex flex-col gap-5">
                             <div className="grid gap-2">
-                                <Label htmlFor="email">Adresă de email</Label>
+                                <Label htmlFor="email">
+                                    {t('Email address')}
+                                </Label>
                                 <Input
                                     id="email"
                                     type="email"
@@ -49,14 +61,16 @@ export default function Login({ status, canResetPassword }: Props) {
 
                             <div className="grid gap-2">
                                 <div className="flex items-center">
-                                    <Label htmlFor="password">Parolă</Label>
+                                    <Label htmlFor="password">
+                                        {t('Password')}
+                                    </Label>
                                     {canResetPassword && (
                                         <TextLink
                                             href={request()}
                                             className="ml-auto text-sm"
                                             tabIndex={5}
                                         >
-                                            Ai uitat parola?
+                                            {t('Forgot password?')}
                                         </TextLink>
                                     )}
                                 </div>
@@ -66,7 +80,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                     required
                                     tabIndex={2}
                                     autoComplete="current-password"
-                                    placeholder="Parola ta"
+                                    placeholder={t('Your password')}
                                 />
                                 <InputError message={errors.password} />
                             </div>
@@ -78,7 +92,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                     tabIndex={3}
                                 />
                                 <Label htmlFor="remember">
-                                    Păstrează sesiunea activă
+                                    {t('Remember me')}
                                 </Label>
                             </div>
 
@@ -92,7 +106,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                 {processing && (
                                     <Spinner data-icon="inline-start" />
                                 )}
-                                Intră în HiveOps
+                                {t('Sign in to HiveOps')}
                             </Button>
                         </div>
                     </>
@@ -107,9 +121,3 @@ export default function Login({ status, canResetPassword }: Props) {
         </>
     );
 }
-
-Login.layout = {
-    title: 'Bine ai revenit',
-    description:
-        'Autentifică-te cu contul intern pentru a continua în BEE CODED HiveOps.',
-};

@@ -44,22 +44,7 @@ class PlanningPeriod
 
     public function label(CarbonInterface $month): string
     {
-        $labels = [
-            1 => 'Ian',
-            2 => 'Feb',
-            3 => 'Mar',
-            4 => 'Apr',
-            5 => 'Mai',
-            6 => 'Iun',
-            7 => 'Iul',
-            8 => 'Aug',
-            9 => 'Sep',
-            10 => 'Oct',
-            11 => 'Nov',
-            12 => 'Dec',
-        ];
-
-        return $labels[$month->month]." '".$month->format('y');
+        return __('dates.months_short.'.$month->month)." '".$month->format('y');
     }
 
     private function dateSetting(SettingKey $key): ?CarbonImmutable

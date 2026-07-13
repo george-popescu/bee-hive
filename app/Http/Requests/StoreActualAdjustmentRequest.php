@@ -51,9 +51,9 @@ class StoreActualAdjustmentRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'internal_label.required_without' => 'Eticheta activității interne este obligatorie.',
-            'effective_date.date_format' => 'Data ajustării trebuie să fie validă.',
-            'hours_delta.not_in' => 'Ajustarea trebuie să modifice numărul de ore.',
+            'internal_label.required_without' => __('messages.adjustments.internal_label_required'),
+            'effective_date.date_format' => __('messages.adjustments.invalid_date'),
+            'hours_delta.not_in' => __('messages.adjustments.non_zero_hours'),
         ];
     }
 
@@ -74,7 +74,7 @@ class StoreActualAdjustmentRequest extends FormRequest
                 if (! in_array($effectiveDate->format('Y-m'), app(TeamLeadPlanData::class)->monthKeys(), true)) {
                     $validator->errors()->add(
                         'effective_date',
-                        'Data trebuie să fie în perioada activă de planificare.',
+                        __('messages.adjustments.date_outside_active_period'),
                     );
                 }
             },

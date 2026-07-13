@@ -1,4 +1,4 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, setLayoutProps } from '@inertiajs/react';
 import {
     index as confirmOptions,
     store as confirmStore,
@@ -9,32 +9,42 @@ import PasswordInput from '@/components/password-input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { useTranslations } from '@/hooks/use-translations';
 import { store } from '@/routes/password/confirm';
 
 export default function ConfirmPassword() {
+    const { t } = useTranslations();
+
+    setLayoutProps({
+        title: t('Confirm access'),
+        description: t(
+            'This is a secure area. Confirm your password before continuing.',
+        ),
+    });
+
     return (
         <>
-            <Head title="Confirmare parolă" />
+            <Head title={t('Confirm password')} />
 
             <PasskeyVerify
                 routes={{
                     options: confirmOptions(),
                     submit: confirmStore(),
                 }}
-                label="Confirmă cu passkey"
-                loadingLabel="Se confirmă..."
-                separator="Sau confirmă folosind parola"
+                label={t('Confirm with a passkey')}
+                loadingLabel={t('Confirming...')}
+                separator={t('Use a password instead')}
             />
 
             <Form {...store.form()} resetOnSuccess={['password']}>
                 {({ processing, errors }) => (
                     <div className="flex flex-col gap-6">
                         <div className="grid gap-2">
-                            <Label htmlFor="password">Parolă</Label>
+                            <Label htmlFor="password">{t('Password')}</Label>
                             <PasswordInput
                                 id="password"
                                 name="password"
-                                placeholder="Parola ta"
+                                placeholder={t('Your password')}
                                 autoComplete="current-password"
                                 autoFocus
                             />
@@ -51,7 +61,7 @@ export default function ConfirmPassword() {
                                 {processing && (
                                     <Spinner data-icon="inline-start" />
                                 )}
-                                Confirmă parola
+                                {t('Confirm password')}
                             </Button>
                         </div>
                     </div>
@@ -60,9 +70,3 @@ export default function ConfirmPassword() {
         </>
     );
 }
-
-ConfirmPassword.layout = {
-    title: 'Confirmă accesul',
-    description:
-        'Aceasta este o zonă securizată. Confirmă parola înainte de a continua.',
-};

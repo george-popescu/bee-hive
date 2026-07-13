@@ -35,7 +35,7 @@ class WeeklyPlanningService
 
             if (($plan === null && $data['version'] !== null)
                 || ($plan !== null && $data['version'] !== $plan->version)) {
-                throw new ConflictHttpException('Planificarea a fost modificată de alt utilizator. Reîncarcă pagina.');
+                throw new ConflictHttpException(__('messages.pm_board.planning_conflict'));
             }
 
             if ($plan === null) {

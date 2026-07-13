@@ -10,6 +10,7 @@ import {
     UsersRound,
 } from 'lucide-react';
 import AppLogoIcon from '@/components/app-logo-icon';
+import { LanguageSwitcher } from '@/components/language-switcher';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,37 +21,41 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { useTranslations } from '@/hooks/use-translations';
 import { dashboard, login } from '@/routes';
-
-const productAreas = [
-    {
-        icon: UsersRound,
-        title: 'Capacitate și alocare',
-        description:
-            'Plan lunar în ore, disponibil după concedii și vizibilitate clară pe echipe și proiecte.',
-    },
-    {
-        icon: BarChart3,
-        title: 'Planificat vs. realizat',
-        description:
-            'Pontaje ClickUp read-only, ajustări auditate și semnale rapide pentru abateri și supra-alocare.',
-    },
-    {
-        icon: ClipboardList,
-        title: 'Board-uri pentru PM',
-        description:
-            'T&M, livrabile, planificare săptămânală și Gantt într-un singur spațiu operațional.',
-    },
-];
 
 export default function Welcome() {
     const { auth } = usePage().props;
+    const { t } = useTranslations();
     const primaryHref = auth.user ? dashboard() : login();
-    const primaryLabel = auth.user ? 'Deschide aplicația' : 'Autentificare';
+    const primaryLabel = auth.user ? t('Open application') : t('Log in');
+    const productAreas = [
+        {
+            icon: UsersRound,
+            title: t('Capacity and allocation'),
+            description: t(
+                'Monthly plan in hours, availability after leave, and clear visibility across teams and projects.',
+            ),
+        },
+        {
+            icon: BarChart3,
+            title: t('Planned vs. actual'),
+            description: t(
+                'ClickUp read-only time entries, audited adjustments, and fast signals for variances and over-allocation.',
+            ),
+        },
+        {
+            icon: ClipboardList,
+            title: t('PM boards'),
+            description: t(
+                'T&M, deliverables, weekly planning and Gantt in one operational workspace.',
+            ),
+        },
+    ];
 
     return (
         <>
-            <Head title="Capacitate, alocare și livrare" />
+            <Head title={t('Capacity, allocation and delivery')} />
             <div className="relative min-h-svh overflow-hidden bg-background">
                 <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-linear-to-b from-muted to-transparent" />
                 <div className="pointer-events-none absolute top-24 -right-32 size-96 rounded-full bg-primary/5 blur-3xl" />
@@ -72,8 +77,9 @@ export default function Welcome() {
                         </Link>
 
                         <div className="flex items-center gap-3">
+                            <LanguageSwitcher />
                             <Badge variant="outline" className="hidden sm:flex">
-                                Aplicație internă
+                                {t('Internal application')}
                             </Badge>
                             <Button asChild size="sm">
                                 <Link href={primaryHref}>
@@ -89,18 +95,18 @@ export default function Welcome() {
                     <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 py-16 lg:grid-cols-[1.05fr_0.95fr] lg:px-8 lg:py-24">
                         <div className="flex flex-col items-start gap-7">
                             <Badge variant="secondary">
-                                Operațiuni clare, într-un singur loc
+                                {t('Clear operations, in one place')}
                             </Badge>
                             <div className="flex max-w-3xl flex-col gap-5">
                                 <h1 className="text-4xl leading-tight font-semibold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-                                    Știm cine este disponibil, unde lucrăm și ce
-                                    livrăm.
+                                    {t(
+                                        'We know who is available, where we work, and what we deliver.',
+                                    )}
                                 </h1>
                                 <p className="max-w-2xl text-lg leading-8 text-pretty text-muted-foreground">
-                                    HiveOps conectează planificarea echipei cu
-                                    activitatea reală din ClickUp, fără să
-                                    schimbe datele sursă și fără foi de calcul
-                                    paralele.
+                                    {t(
+                                        'HiveOps connects team planning with real ClickUp activity, without changing source data or maintaining parallel spreadsheets.',
+                                    )}
                                 </p>
                             </div>
 
@@ -113,7 +119,7 @@ export default function Welcome() {
                                 </Button>
                                 <Button asChild size="lg" variant="outline">
                                     <a href="#capabilitati">
-                                        Vezi capabilitățile
+                                        {t('Go to capabilities')}
                                     </a>
                                 </Button>
                             </div>
@@ -121,15 +127,15 @@ export default function Welcome() {
                             <div className="flex flex-wrap gap-x-6 gap-y-3 text-sm text-muted-foreground">
                                 <span className="flex items-center gap-2">
                                     <ShieldCheck className="size-4" />
-                                    Acces pe roluri
+                                    {t('Role-based access')}
                                 </span>
                                 <span className="flex items-center gap-2">
                                     <Clock3 className="size-4" />
-                                    ClickUp read-only
+                                    {t('ClickUp read-only')}
                                 </span>
                                 <span className="flex items-center gap-2">
                                     <CheckCircle2 className="size-4" />
-                                    Modificări auditate
+                                    {t('All changes are audited')}
                                 </span>
                             </div>
                         </div>
@@ -139,30 +145,31 @@ export default function Welcome() {
                                 <div className="flex items-start justify-between gap-4">
                                     <div className="flex flex-col gap-1">
                                         <CardTitle>
-                                            Privire operațională
+                                            {t('Operational overview')}
                                         </CardTitle>
                                         <CardDescription>
-                                            Plan, capacitate și execuție în
-                                            aceeași imagine.
+                                            {t(
+                                                'Plan, capacity and execution in one view.',
+                                            )}
                                         </CardDescription>
                                     </div>
-                                    <Badge variant="outline">Live</Badge>
+                                    <Badge variant="outline">{t('Live')}</Badge>
                                 </div>
                             </CardHeader>
                             <CardContent className="flex flex-col gap-5 pt-6">
                                 <div className="grid gap-3 sm:grid-cols-3">
                                     <Metric
-                                        label="Capacitate"
-                                        value="Disponibilă"
-                                        detail="după concedii"
+                                        label={t('Capacity')}
+                                        value={t('Available')}
+                                        detail={t('after leave')}
                                     />
                                     <Metric
-                                        label="Plan"
-                                        value="În ore"
-                                        detail="pe proiect"
+                                        label={t('Plan')}
+                                        value={t('In hours')}
+                                        detail={t('by project')}
                                     />
                                     <Metric
-                                        label="Realizat"
+                                        label={t('Actual')}
                                         value="ClickUp"
                                         detail="read-only"
                                     />
@@ -173,20 +180,26 @@ export default function Welcome() {
                                 <div className="flex flex-col gap-3">
                                     <PreviewRow
                                         icon={UsersRound}
-                                        title="Utilizare echipă"
-                                        detail="capacitate și abateri lunare"
+                                        title={t('Team utilization')}
+                                        detail={t(
+                                            'Capacity and monthly variances',
+                                        )}
                                         badge="Management"
                                     />
                                     <PreviewRow
                                         icon={CalendarRange}
-                                        title="Planificare săptămânală"
-                                        detail="resurse, livrabile și Gantt"
+                                        title={t('Weekly planning')}
+                                        detail={t(
+                                            'Deliverables, resources and Gantt',
+                                        )}
                                         badge="PM"
                                     />
                                     <PreviewRow
                                         icon={ClipboardList}
-                                        title="Alocări"
-                                        detail="plan în ore, pe echipă"
+                                        title={t('Allocation')}
+                                        detail={t(
+                                            'Allocation plan in hours, by team',
+                                        )}
                                         badge="Team Lead"
                                     />
                                 </div>
@@ -198,14 +211,17 @@ export default function Welcome() {
                         <div className="mx-auto flex max-w-7xl flex-col gap-10 px-6 py-16 lg:px-8">
                             <div className="flex max-w-2xl flex-col gap-3">
                                 <Badge variant="outline" className="w-fit">
-                                    Un flux, mai multe roluri
+                                    {t('One flow, multiple roles')}
                                 </Badge>
                                 <h2 className="text-3xl font-semibold tracking-tight">
-                                    Fiecare vede exact ce are de decis.
+                                    {t(
+                                        'Every role sees exactly what it needs to decide.',
+                                    )}
                                 </h2>
                                 <p className="text-muted-foreground">
-                                    Aceleași date, prezentate diferit pentru
-                                    Management, Team Leads și Project Managers.
+                                    {t(
+                                        'Project Managers, Team Leads and Management use the same data, presented for their decisions.',
+                                    )}
                                 </p>
                             </div>
 
@@ -233,7 +249,7 @@ export default function Welcome() {
                 <footer className="relative">
                     <div className="mx-auto flex max-w-7xl flex-col gap-2 px-6 py-8 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:px-8">
                         <span>BEE CODED HiveOps</span>
-                        <span>Capacitate · Alocare · Livrare</span>
+                        <span>{t('Capacity, Allocation & Delivery')}</span>
                     </div>
                 </footer>
             </div>

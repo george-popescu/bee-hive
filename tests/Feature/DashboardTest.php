@@ -94,7 +94,7 @@ it('builds an executive company overview from the active month', function () {
         ->assertSuccessful()
         ->assertInertia(fn (Assert $page) => $page
             ->component('dashboard')
-            ->where('dashboard.scope.label', 'Toată compania')
+            ->where('dashboard.scope.label', 'Entire company')
             ->where('dashboard.focusMonth.key', '2026-07')
             ->where('dashboard.kpis.capacityHours', 160)
             ->where('dashboard.kpis.plannedHours', 120)
@@ -274,7 +274,7 @@ it('limits a project manager dashboard to managed projects', function () {
         ->get(route('dashboard'))
         ->assertSuccessful()
         ->assertInertia(fn (Assert $page) => $page
-            ->where('dashboard.scope.label', 'Proiectele mele')
+            ->where('dashboard.scope.label', 'My projects')
             ->where('dashboard.kpis.people', 1)
             ->where('dashboard.kpis.plannedHours', 40)
             ->where('dashboard.kpis.actualHours', 10)
@@ -319,7 +319,7 @@ it('limits a team lead dashboard to people in teams they lead', function () {
         ->get(route('dashboard'))
         ->assertSuccessful()
         ->assertInertia(fn (Assert $page) => $page
-            ->where('dashboard.scope.label', 'Echipa mea')
+            ->where('dashboard.scope.label', 'My team')
             ->where('dashboard.kpis.people', 2)
             ->where('dashboard.kpis.capacityHours', 320)
             ->where('dashboard.kpis.plannedHours', 60));

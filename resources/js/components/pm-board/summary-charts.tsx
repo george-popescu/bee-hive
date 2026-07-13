@@ -5,6 +5,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { useTranslations } from '@/hooks/use-translations';
 import { cn } from '@/lib/utils';
 
 type HoursRow = {
@@ -37,8 +38,8 @@ const chartColors = [
     'bg-chart-5',
 ];
 
-function hours(value: number): string {
-    return `${value.toLocaleString('ro-RO', { maximumFractionDigits: 2 })}h`;
+function hours(value: number, locale: string): string {
+    return `${value.toLocaleString(locale, { maximumFractionDigits: 2 })}h`;
 }
 
 function projectColor(label: string, projectLabels: string[]): string {
@@ -50,10 +51,12 @@ function projectColor(label: string, projectLabels: string[]): string {
 function HorizontalHoursChart({
     rows,
     projectLabels,
+    locale,
     colorByProject = false,
 }: {
     rows: HoursRow[];
     projectLabels: string[];
+    locale: string;
     colorByProject?: boolean;
 }) {
     const maximumHours = Math.max(...rows.map((row) => row.hours), 1);
@@ -67,7 +70,7 @@ function HorizontalHoursChart({
                             {row.label}
                         </span>
                         <span className="shrink-0 text-muted-foreground tabular-nums">
-                            {hours(row.hours)}
+                            {hours(row.hours, locale)}
                         </span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-muted">
@@ -116,6 +119,8 @@ export function SummaryCharts({
     periodLabel: string;
     periodType: 'week' | 'month';
 }) {
+    const { languageTag, t } = useTranslations();
+
     if (data.projects.length === 0) {
         return null;
     }
@@ -134,11 +139,15 @@ export function SummaryCharts({
         <div className="grid gap-4 lg:grid-cols-2">
             <Card className="lg:col-span-2">
                 <CardHeader>
-                    <CardTitle>Evoluția orelor</CardTitle>
+                    <CardTitle>{t('Hours over time')}</CardTitle>
                     <CardDescription>
                         {periodType === 'month'
-                            ? `Ore grupate pe săptămâni în ${periodLabel}.`
-                            : `Ore grupate pe zile în ${periodLabel}.`}
+                            ? t('Hours grouped by week in :period.', {
+                                  period: periodLabel,
+                              })
+                            : t('Hours grouped by day in :period.', {
+                                  period: periodLabel,
+                              })}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-5">
@@ -148,7 +157,7 @@ export function SummaryCharts({
                             gridTemplateColumns: `repeat(${data.timeline.length}, minmax(0, 1fr))`,
                         }}
                         role="img"
-                        aria-label="Evoluția orelor în perioada selectată"
+                        aria-label={t('Hours over the selected period')}
                     >
                         {data.timeline.map((bucket) => (
                             <div
@@ -157,7 +166,7 @@ export function SummaryCharts({
                             >
                                 <span className="text-center text-xs text-muted-foreground tabular-nums">
                                     {bucket.hours > 0
-                                        ? hours(bucket.hours)
+                                        ? hours(bucket.hours, languageTag)
                                         : '—'}
                                 </span>
                                 <div className="flex h-32 flex-col-reverse overflow-hidden rounded-md bg-muted">
@@ -171,7 +180,7 @@ export function SummaryCharts({
                                             style={{
                                                 height: `${(project.hours / maximumTimelineHours) * 100}%`,
                                             }}
-                                            title={`${bucket.label} · ${project.label}: ${hours(project.hours)}`}
+                                            title={`${bucket.label} · ${project.label}: ${hours(project.hours, languageTag)}`}
                                         />
                                     ))}
                                 </div>
@@ -187,15 +196,18 @@ export function SummaryCharts({
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Ore pe proiect</CardTitle>
+                    <CardTitle>{t('Hours by project')}</CardTitle>
                     <CardDescription>
-                        Proiectele și activitățile interne ordonate după consum.
+                        {t(
+                            'Projects and internal activities ordered by consumption.',
+                        )}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <HorizontalHoursChart
                         rows={data.projects}
                         projectLabels={projectLabels}
+                        locale={languageTag}
                         colorByProject
                     />
                 </CardContent>
@@ -203,25 +215,27 @@ export function SummaryCharts({
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Cine a lucrat</CardTitle>
+                    <CardTitle>{t('Who worked')}</CardTitle>
                     <CardDescription>
-                        Contribuția totală a fiecărei persoane în perioadă.
+                        {t("Each person's total contribution in the period.")}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <HorizontalHoursChart
                         rows={peopleRows}
                         projectLabels={projectLabels}
+                        locale={languageTag}
                     />
                 </CardContent>
             </Card>
 
             <Card className="lg:col-span-2">
                 <CardHeader>
-                    <CardTitle>Mixul de proiecte per persoană</CardTitle>
+                    <CardTitle>{t('Project mix by person')}</CardTitle>
                     <CardDescription>
-                        Cum se împart orele fiecărui om între proiectele
-                        selectate.
+                        {t(
+                            "How each person's hours are split across the selected projects.",
+                        )}
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col gap-5">
@@ -238,8 +252,8 @@ export function SummaryCharts({
                                     <p className="text-xs text-muted-foreground">
                                         {person.tasks}{' '}
                                         {person.tasks === 1
-                                            ? 'task'
-                                            : 'taskuri'}
+                                            ? t('task')
+                                            : t('tasks')}
                                     </p>
                                 </div>
                                 <div className="flex h-3 overflow-hidden rounded-full bg-muted">
@@ -253,12 +267,12 @@ export function SummaryCharts({
                                             style={{
                                                 width: `${(project.hours / Math.max(person.hours, 1)) * 100}%`,
                                             }}
-                                            title={`${project.label}: ${hours(project.hours)}`}
+                                            title={`${project.label}: ${hours(project.hours, languageTag)}`}
                                         />
                                     ))}
                                 </div>
                                 <span className="text-right text-sm font-medium tabular-nums">
-                                    {hours(person.hours)}
+                                    {hours(person.hours, languageTag)}
                                 </span>
                             </div>
                         ))}

@@ -1,4 +1,4 @@
-import { Head, Link, router, useHttp } from '@inertiajs/react';
+import { Head, Link, router, setLayoutProps, useHttp } from '@inertiajs/react';
 import {
     ArrowLeft,
     ArrowRight,
@@ -54,6 +54,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useTranslations } from '@/hooks/use-translations';
 import { index as pmBoardIndex } from '@/routes/pm_board';
 
 type Project = {
@@ -196,10 +197,10 @@ type ProjectSelection = {
     includeInternal: boolean;
 };
 
-function hours(value: number | null): string {
+function hours(value: number | null, locale: string): string {
     return value === null
         ? '—'
-        : `${value.toLocaleString('ro-RO', { maximumFractionDigits: 2 })}h`;
+        : `${value.toLocaleString(locale, { maximumFractionDigits: 2 })}h`;
 }
 
 function boardHref(
@@ -247,16 +248,20 @@ function TaskStatus({ task }: { task: BoardTask }) {
 }
 
 function Progress({ task }: { task: BoardTask }) {
+    const { languageTag, t } = useTranslations();
+
     if (task.progress === null) {
-        return <span className="text-muted-foreground">Fără estimare</span>;
+        return (
+            <span className="text-muted-foreground">{t('No estimate')}</span>
+        );
     }
 
     return (
         <div className="min-w-28 space-y-1">
             <div className="flex justify-between text-xs tabular-nums">
-                <span>{task.progress.toLocaleString('ro-RO')}%</span>
+                <span>{task.progress.toLocaleString(languageTag)}%</span>
                 {task.isOverrun && (
-                    <span className="text-destructive">depășire</span>
+                    <span className="text-destructive">{t('Overrun')}</span>
                 )}
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-muted">
@@ -297,6 +302,7 @@ function DeliverableTaskRows({
     planning: Planning;
     editable: boolean;
 }) {
+    const { languageTag, t } = useTranslations();
     const plan = planning.plans.find((item) => item.taskId === task.id);
     const [selected, setSelected] = useState(plan?.selected ?? false);
     const [confirmedSelected, setConfirmedSelected] = useState(
@@ -349,23 +355,25 @@ function DeliverableTaskRows({
                     setSelected(response.plan.selected);
                     setConfirmedSelected(response.plan.selected);
                     setVersion(response.plan.version);
-                    toast.success('Planificarea săptămânală a fost salvată.');
+                    toast.success(t('The weekly planning was saved.'));
                     router.reload({ only: ['planning', 'gantt'] });
                 },
                 onHttpException: () => {
                     rollback();
                     toast.error(
-                        'Planificarea s-a schimbat între timp. Reîncarcă și încearcă din nou.',
+                        t(
+                            'Planning changed in the meantime. Reload and try again.',
+                        ),
                     );
                 },
                 onError: () => {
                     rollback();
-                    toast.error('Planificarea nu a putut fi salvată.');
+                    toast.error(t('The weekly planning could not be saved.'));
                 },
                 onNetworkError: () => {
                     rollback();
                     toast.error(
-                        'Conexiunea a eșuat. Modificările nu s-au salvat.',
+                        t('Connection failed. The changes were not saved.'),
                     );
                 },
             })
@@ -378,7 +386,7 @@ function DeliverableTaskRows({
                 <TableCell>
                     {editable ? (
                         <Checkbox
-                            aria-label={`Planifică ${task.name}`}
+                            aria-label={t('Plan :task', { task: task.name })}
                             checked={selected}
                             disabled={form.processing}
                             onCheckedChange={(checked) => {
@@ -403,13 +411,15 @@ function DeliverableTaskRows({
                         {task.name}
                     </a>
                 </TableCell>
-                <TableCell>{task.owners.join(', ') || 'Nealocat'}</TableCell>
+                <TableCell>
+                    {task.owners.join(', ') || t('Unassigned')}
+                </TableCell>
                 <TableCell>
                     <TaskStatus task={task} />
                 </TableCell>
                 <TableCell>{task.dueDate ?? '—'}</TableCell>
                 <TableCell className="text-right tabular-nums">
-                    {hours(task.estimateHours)}
+                    {hours(task.estimateHours, languageTag)}
                 </TableCell>
                 <TableCell
                     className={
@@ -418,7 +428,7 @@ function DeliverableTaskRows({
                             : 'text-right tabular-nums'
                     }
                 >
-                    {hours(task.remainingHours)}
+                    {hours(task.remainingHours, languageTag)}
                 </TableCell>
                 <TableCell>
                     <Progress task={task} />
@@ -458,7 +468,7 @@ function DeliverableTaskRows({
                                 disabled={form.processing}
                                 onClick={() => save()}
                             >
-                                <Save /> Salvează orele
+                                <Save /> {t('Save hours')}
                             </Button>
                         </div>
                     </TableCell>
@@ -469,7 +479,7 @@ function DeliverableTaskRows({
 }
 
 function ganttCellClass(status: string): string {
-    const normalized = status.toLocaleLowerCase('ro');
+    const normalized = status.toLowerCase();
 
     if (
         normalized.includes('done') ||
@@ -514,6 +524,7 @@ export default function PmBoard({
     sync,
     permissions,
 }: Props) {
+    const { languageTag, t } = useTranslations();
     const [section, setSection] = useState<Section>('summary');
     const [displayMode, setDisplayMode] = useState<'presentation' | 'edit'>(
         'presentation',
@@ -542,27 +553,34 @@ export default function PmBoard({
         selectedProjectIds.length + (includeInternal ? 1 : 0);
     const selectedItemsLabel =
         selectedItemsCount === 1
-            ? '1 selecție'
-            : `${selectedItemsCount} selecții`;
+            ? t('1 selection')
+            : t(':count selections', { count: selectedItemsCount });
     const selectionHeading = allProjectsSelected
-        ? 'Toate proiectele'
+        ? t('All projects')
         : selectedProject
           ? selectedProject.label
           : selectedProjectIds.length === 0 && includeInternal
             ? internalOption.label
-            : 'Selecție personalizată';
+            : t('Custom selection');
     const selectionBadge = allProjectsSelected
-        ? `${projects.length} proiecte${internalOption.available ? ' + interne' : ''}`
+        ? t(
+              internalOption.available
+                  ? ':count projects + internal'
+                  : ':count projects',
+              { count: projects.length },
+          )
         : selectedProject
           ? selectedProject.templateLabel
           : selectedItemsLabel;
     const selectorLabel = allProjectsSelected
-        ? `Toate proiectele · ${hours(allPeriodHours)}`
+        ? t('All projects · :hours', {
+              hours: hours(allPeriodHours, languageTag),
+          })
         : selectedProject
-          ? `${selectedProject.label} · ${hours(selectedPeriodHours)}`
+          ? `${selectedProject.label} · ${hours(selectedPeriodHours, languageTag)}`
           : selectedProjectIds.length === 0 && includeInternal
-            ? `${internalOption.label} · ${hours(selectedPeriodHours)}`
-            : `${selectedItemsLabel} · ${hours(selectedPeriodHours)}`;
+            ? `${internalOption.label} · ${hours(selectedPeriodHours, languageTag)}`
+            : `${selectedItemsLabel} · ${hours(selectedPeriodHours, languageTag)}`;
     const isDeliverables = selectedProject?.template === 'deliverables';
     const showProjectLabels = selectedProject === null;
     const activeSection = isDeliverables
@@ -618,22 +636,26 @@ export default function PmBoard({
     const canApplyProjectSelection =
         draftAllProjects || draftProjectIds.length > 0 || draftIncludeInternal;
 
+    setLayoutProps({
+        breadcrumbs: [{ title: t('PM boards'), href: pmBoardIndex() }],
+    });
+
     return (
         <>
-            <Head title="Board-uri PM" />
+            <Head title={t('PM boards')} />
             <div className="flex h-full flex-1 flex-col gap-4 overflow-x-hidden p-4">
                 <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
                     <div className="space-y-2">
                         <div className="flex items-center gap-2">
                             <LayoutDashboard className="size-6" />
                             <h1 className="text-2xl font-semibold tracking-tight">
-                                Board-uri PM
+                                {t('PM boards')}
                             </h1>
                         </div>
                         <p className="max-w-3xl text-sm text-muted-foreground">
-                            Situația proiectului din ClickUp: efort consumat,
-                            estimări, progres și echipa activă în perioada
-                            aleasă.
+                            {t(
+                                'Project delivery status from ClickUp: consumed effort, estimates, progress, and the active team for the selected period.',
+                            )}
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -654,12 +676,12 @@ export default function PmBoard({
                                 }
                             >
                                 <SelectTrigger className="w-48">
-                                    <SelectValue placeholder="Toți PM-ii" />
+                                    <SelectValue placeholder={t('All PMs')} />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectGroup>
                                         <SelectItem value="all">
-                                            Toți PM-ii
+                                            {t('All PMs')}
                                         </SelectItem>
                                         {managers.map((manager) => (
                                             <SelectItem
@@ -684,11 +706,11 @@ export default function PmBoard({
                             }}
                         >
                             <ToggleGroupItem value="presentation">
-                                Prezentare
+                                {t('Presentation')}
                             </ToggleGroupItem>
                             {permissions.managePlanning && isDeliverables && (
                                 <ToggleGroupItem value="edit">
-                                    Editare
+                                    {t('Edit')}
                                 </ToggleGroupItem>
                             )}
                         </ToggleGroup>
@@ -705,7 +727,7 @@ export default function PmBoard({
                                     )
                                 }
                             >
-                                <RefreshCw /> Actualizează ClickUp
+                                <RefreshCw /> {t('Refresh ClickUp')}
                             </Button>
                         )}
                     </div>
@@ -713,7 +735,9 @@ export default function PmBoard({
 
                 {(projects.length > 0 || internalOption.available) && (
                     <div className="grid w-full gap-2 sm:max-w-md">
-                        <Label htmlFor="project-selector">Proiecte</Label>
+                        <Label htmlFor="project-selector">
+                            {t('Projects')}
+                        </Label>
                         <DropdownMenu
                             open={projectSelectorOpen}
                             onOpenChange={handleProjectSelectorOpen}
@@ -736,7 +760,7 @@ export default function PmBoard({
                             >
                                 <DropdownMenuGroup>
                                     <DropdownMenuLabel>
-                                        Vedere
+                                        {t('View')}
                                     </DropdownMenuLabel>
                                     <DropdownMenuCheckboxItem
                                         checked={draftAllProjects}
@@ -764,17 +788,17 @@ export default function PmBoard({
                                         }
                                     >
                                         <span className="flex-1 truncate">
-                                            Toate proiectele
+                                            {t('All projects')}
                                         </span>
                                         <span className="text-muted-foreground tabular-nums">
-                                            {hours(allPeriodHours)}
+                                            {hours(allPeriodHours, languageTag)}
                                         </span>
                                     </DropdownMenuCheckboxItem>
                                 </DropdownMenuGroup>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuGroup>
                                     <DropdownMenuLabel>
-                                        Proiecte disponibile
+                                        {t('Available projects')}
                                     </DropdownMenuLabel>
                                     {projects.map((project) => (
                                         <DropdownMenuCheckboxItem
@@ -807,7 +831,10 @@ export default function PmBoard({
                                                 {project.label}
                                             </span>
                                             <span className="text-muted-foreground tabular-nums">
-                                                {hours(project.periodHours)}
+                                                {hours(
+                                                    project.periodHours,
+                                                    languageTag,
+                                                )}
                                             </span>
                                         </DropdownMenuCheckboxItem>
                                     ))}
@@ -830,6 +857,7 @@ export default function PmBoard({
                                             <span className="text-muted-foreground tabular-nums">
                                                 {hours(
                                                     internalOption.periodHours,
+                                                    languageTag,
                                                 )}
                                             </span>
                                         </DropdownMenuCheckboxItem>
@@ -841,7 +869,7 @@ export default function PmBoard({
                                         disabled={!canApplyProjectSelection}
                                         onSelect={applyProjectSelection}
                                     >
-                                        Aplică selecția
+                                        {t('Apply selection')}
                                     </DropdownMenuItem>
                                 </DropdownMenuGroup>
                             </DropdownMenuContent>
@@ -852,10 +880,11 @@ export default function PmBoard({
                 {projects.length === 0 && !internalOption.available ? (
                     <Card>
                         <CardHeader>
-                            <CardTitle>Niciun proiect disponibil</CardTitle>
+                            <CardTitle>{t('No projects available')}</CardTitle>
                             <CardDescription>
-                                Filtrul curent sau permisiunile tale nu includ
-                                proiecte vizibile în board.
+                                {t(
+                                    'The current filter or your permissions do not include any projects visible on the board.',
+                                )}
                             </CardDescription>
                         </CardHeader>
                     </Card>
@@ -874,31 +903,40 @@ export default function PmBoard({
                                         {displayMode === 'edit' &&
                                             isDeliverables && (
                                                 <Badge variant="warning">
-                                                    Mod editare
+                                                    {t('Edit mode')}
                                                 </Badge>
                                             )}
                                     </div>
                                     <p className="mt-1 text-sm text-muted-foreground">
                                         {sync?.status === 'failed'
-                                            ? `Ultima sincronizare a eșuat${sync.error ? `: ${sync.error}` : '.'}`
-                                            : 'Ultima sincronizare: '}
+                                            ? t(
+                                                  'Last synchronization failed:error',
+                                                  {
+                                                      error: sync.error
+                                                          ? `: ${sync.error}`
+                                                          : '.',
+                                                  },
+                                              )
+                                            : `${t('Last synchronization:')} `}
                                         {sync?.status !== 'failed' &&
                                         sync?.finishedAt
                                             ? new Date(
                                                   sync.finishedAt,
-                                              ).toLocaleString('ro-RO')
+                                              ).toLocaleString(languageTag)
                                             : sync?.status !== 'failed' &&
                                                 sync?.startedAt
-                                              ? 'în curs'
+                                              ? t(
+                                                    'In progress',
+                                                ).toLocaleLowerCase(languageTag)
                                               : sync?.status !== 'failed'
-                                                ? 'nu există încă'
+                                                ? t('Not yet')
                                                 : ''}
                                     </p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
                                     {isDeliverables ? (
                                         <Badge variant="secondary">
-                                            Board săptămânal
+                                            {t('Weekly board')}
                                         </Badge>
                                     ) : (
                                         <ToggleGroup
@@ -915,10 +953,10 @@ export default function PmBoard({
                                             }}
                                         >
                                             <ToggleGroupItem value="week">
-                                                Săptămână
+                                                {t('Week')}
                                             </ToggleGroupItem>
                                             <ToggleGroupItem value="month">
-                                                Lună
+                                                {t('Month')}
                                             </ToggleGroupItem>
                                         </ToggleGroup>
                                     )}
@@ -935,7 +973,7 @@ export default function PmBoard({
                                                 selectedPmId,
                                             )}
                                             preserveScroll
-                                            aria-label="Perioada anterioară"
+                                            aria-label={t('Previous period')}
                                         >
                                             <ArrowLeft />
                                         </Link>
@@ -956,7 +994,7 @@ export default function PmBoard({
                                                 selectedPmId,
                                             )}
                                             preserveScroll
-                                            aria-label="Perioada următoare"
+                                            aria-label={t('Next period')}
                                         >
                                             <ArrowRight />
                                         </Link>
@@ -967,17 +1005,20 @@ export default function PmBoard({
 
                         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                             {[
-                                ['Ore lucrate', hours(kpis.actualHours)],
                                 [
-                                    'Estimare taskuri lucrate',
-                                    hours(kpis.plannedHours),
+                                    t('Worked hours'),
+                                    hours(kpis.actualHours, languageTag),
                                 ],
-                                ['Taskuri lucrate', String(kpis.workedTasks)],
                                 [
-                                    'Taskuri active estimate',
+                                    t('Estimate for worked tasks'),
+                                    hours(kpis.plannedHours, languageTag),
+                                ],
+                                [t('Worked tasks'), String(kpis.workedTasks)],
+                                [
+                                    t('Estimated active tasks'),
                                     String(kpis.plannedTasks),
                                 ],
-                                ['Oameni activi', String(kpis.activePeople)],
+                                [t('Active people'), String(kpis.activePeople)],
                             ].map(([label, value]) => (
                                 <Card key={label}>
                                     <CardHeader className="pb-2">
@@ -1004,20 +1045,22 @@ export default function PmBoard({
                             className="flex-wrap justify-start"
                         >
                             <ToggleGroupItem value="summary">
-                                Sumar
+                                {t('Summary')}
                             </ToggleGroupItem>
                             <ToggleGroupItem value="worked">
                                 {isDeliverables
-                                    ? '① Săptămâna anterioară'
-                                    : 'Lucrat în perioadă'}
+                                    ? `① ${t('Previous week')}`
+                                    : t('Worked in period')}
                             </ToggleGroupItem>
                             <ToggleGroupItem value="upcoming">
-                                {isDeliverables ? '② În progres' : 'Urmează'}
+                                {isDeliverables
+                                    ? `② ${t('In progress')}`
+                                    : t('Upcoming')}
                             </ToggleGroupItem>
                             {isDeliverables ? (
                                 <>
                                     <ToggleGroupItem value="planning">
-                                        ③ Planificare resurse
+                                        ③ {t('Resource planning')}
                                     </ToggleGroupItem>
                                     <ToggleGroupItem value="gantt">
                                         Gantt
@@ -1025,7 +1068,7 @@ export default function PmBoard({
                                 </>
                             ) : (
                                 <ToggleGroupItem value="people">
-                                    Echipa activă
+                                    {t('Active team')}
                                 </ToggleGroupItem>
                             )}
                         </ToggleGroup>
@@ -1041,11 +1084,12 @@ export default function PmBoard({
                                     <Card>
                                         <CardHeader>
                                             <CardTitle>
-                                                Consum în perioadă
+                                                {t('Period consumption')}
                                             </CardTitle>
                                             <CardDescription>
-                                                Primele taskuri după orele
-                                                pontate.
+                                                {t(
+                                                    'Top tasks by logged hours.',
+                                                )}
                                             </CardDescription>
                                         </CardHeader>
                                         <CardContent className="flex flex-col gap-3">
@@ -1076,24 +1120,29 @@ export default function PmBoard({
                                                         <span className="shrink-0 tabular-nums">
                                                             {hours(
                                                                 task.periodHours,
+                                                                languageTag,
                                                             )}
                                                         </span>
                                                     </div>
                                                 ))}
                                             {workedTasks.length === 0 && (
                                                 <p className="text-sm text-muted-foreground">
-                                                    Nu există pontaje în
-                                                    perioada aleasă.
+                                                    {t(
+                                                        'No time entries in the selected period.',
+                                                    )}
                                                 </p>
                                             )}
                                         </CardContent>
                                     </Card>
                                     <Card>
                                         <CardHeader>
-                                            <CardTitle>De urmărit</CardTitle>
+                                            <CardTitle>
+                                                {t('To watch')}
+                                            </CardTitle>
                                             <CardDescription>
-                                                Taskuri active ordonate după
-                                                status și termen.
+                                                {t(
+                                                    'Active tasks are ordered by status and due date.',
+                                                )}
                                             </CardDescription>
                                         </CardHeader>
                                         <CardContent className="flex flex-col gap-3">
@@ -1115,9 +1164,11 @@ export default function PmBoard({
                                                             </a>
                                                             <span className="text-xs text-muted-foreground">
                                                                 {showProjectLabels
-                                                                    ? `${task.projectLabel} · ${task.dueDate ?? 'fără termen'}`
+                                                                    ? `${task.projectLabel} · ${task.dueDate ?? t('No due date')}`
                                                                     : (task.dueDate ??
-                                                                      'fără termen')}
+                                                                      t(
+                                                                          'No due date',
+                                                                      ))}
                                                             </span>
                                                         </div>
                                                         <TaskStatus
@@ -1127,7 +1178,7 @@ export default function PmBoard({
                                                 ))}
                                             {upcomingTasks.length === 0 && (
                                                 <p className="text-sm text-muted-foreground">
-                                                    Nu există taskuri active.
+                                                    {t('No active tasks.')}
                                                 </p>
                                             )}
                                         </CardContent>
@@ -1139,29 +1190,38 @@ export default function PmBoard({
                         {activeSection === 'worked' && (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Taskuri lucrate</CardTitle>
+                                    <CardTitle>{t('Worked tasks')}</CardTitle>
                                     <CardDescription>
-                                        Orele din {period.label}; progresul
-                                        folosește toate pontajele istorice ale
-                                        taskului.
+                                        {t(
+                                            'The hours in :period; progress uses all historical time entries for the task.',
+                                            {
+                                                period: period.label,
+                                            },
+                                        )}
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="overflow-x-auto">
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHead>Task</TableHead>
-                                                <TableHead>Status</TableHead>
                                                 <TableHead>
-                                                    Contribuitori
+                                                    {t('Task')}
+                                                </TableHead>
+                                                <TableHead>
+                                                    {t('Status')}
+                                                </TableHead>
+                                                <TableHead>
+                                                    {t('Contributors')}
                                                 </TableHead>
                                                 <TableHead className="text-right">
-                                                    Perioadă
+                                                    {t('Period')}
                                                 </TableHead>
                                                 <TableHead className="text-right">
-                                                    Total
+                                                    {t('Total')}
                                                 </TableHead>
-                                                <TableHead>Progres</TableHead>
+                                                <TableHead>
+                                                    {t('Progress')}
+                                                </TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -1196,18 +1256,20 @@ export default function PmBoard({
                                                         {task.people
                                                             .map(
                                                                 (person) =>
-                                                                    `${person.name} · ${hours(person.hours)}`,
+                                                                    `${person.name} · ${hours(person.hours, languageTag)}`,
                                                             )
                                                             .join(', ') || '—'}
                                                     </TableCell>
                                                     <TableCell className="text-right tabular-nums">
                                                         {hours(
                                                             task.periodHours,
+                                                            languageTag,
                                                         )}
                                                     </TableCell>
                                                     <TableCell className="text-right tabular-nums">
                                                         {hours(
                                                             task.totalLoggedHours,
+                                                            languageTag,
                                                         )}
                                                     </TableCell>
                                                     <TableCell>
@@ -1218,7 +1280,9 @@ export default function PmBoard({
                                             {workedTasks.length === 0 && (
                                                 <EmptyRow
                                                     columns={6}
-                                                    label="Nu există pontaje în perioada aleasă."
+                                                    label={t(
+                                                        'No time entries in the selected period.',
+                                                    )}
                                                 />
                                             )}
                                         </TableBody>
@@ -1232,13 +1296,22 @@ export default function PmBoard({
                                 <CardHeader>
                                     <CardTitle>
                                         {isDeliverables
-                                            ? 'În progres și de făcut'
-                                            : 'Taskuri active'}
+                                            ? t('In progress and to do')
+                                            : t('Active tasks')}
                                     </CardTitle>
                                     <CardDescription>
                                         {isDeliverables
-                                            ? `Planificarea vizează săptămâna care începe la ${planning?.weekStart ?? '—'}. Taskurile recurente configurate sunt ascunse aici.`
-                                            : 'Ownership, termen și efort rămas față de estimarea ClickUp.'}
+                                            ? t(
+                                                  'Planning targets the week starting :date. Configured recurring tasks are hidden here.',
+                                                  {
+                                                      date:
+                                                          planning?.weekStart ??
+                                                          '—',
+                                                  },
+                                              )
+                                            : t(
+                                                  'Ownership, due date and remaining effort compared with the ClickUp estimate.',
+                                              )}
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="overflow-x-auto">
@@ -1246,19 +1319,31 @@ export default function PmBoard({
                                         <TableHeader>
                                             <TableRow>
                                                 {isDeliverables && (
-                                                    <TableHead>Plan</TableHead>
+                                                    <TableHead>
+                                                        {t('Plan')}
+                                                    </TableHead>
                                                 )}
-                                                <TableHead>Task</TableHead>
-                                                <TableHead>Owner</TableHead>
-                                                <TableHead>Status</TableHead>
-                                                <TableHead>Termen</TableHead>
-                                                <TableHead className="text-right">
-                                                    Estimat
+                                                <TableHead>
+                                                    {t('Task')}
+                                                </TableHead>
+                                                <TableHead>
+                                                    {t('Owner')}
+                                                </TableHead>
+                                                <TableHead>
+                                                    {t('Status')}
+                                                </TableHead>
+                                                <TableHead>
+                                                    {t('Due date')}
                                                 </TableHead>
                                                 <TableHead className="text-right">
-                                                    Rămas
+                                                    {t('Estimated')}
                                                 </TableHead>
-                                                <TableHead>Progres</TableHead>
+                                                <TableHead className="text-right">
+                                                    {t('Remaining')}
+                                                </TableHead>
+                                                <TableHead>
+                                                    {t('Progress')}
+                                                </TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
@@ -1308,7 +1393,10 @@ export default function PmBoard({
                                                           <TableCell>
                                                               {task.owners.join(
                                                                   ', ',
-                                                              ) || 'Nealocat'}
+                                                              ) ||
+                                                                  t(
+                                                                      'Unassigned',
+                                                                  )}
                                                           </TableCell>
                                                           <TableCell>
                                                               <TaskStatus
@@ -1322,6 +1410,7 @@ export default function PmBoard({
                                                           <TableCell className="text-right tabular-nums">
                                                               {hours(
                                                                   task.estimateHours,
+                                                                  languageTag,
                                                               )}
                                                           </TableCell>
                                                           <TableCell
@@ -1333,6 +1422,7 @@ export default function PmBoard({
                                                           >
                                                               {hours(
                                                                   task.remainingHours,
+                                                                  languageTag,
                                                               )}
                                                           </TableCell>
                                                           <TableCell>
@@ -1347,7 +1437,9 @@ export default function PmBoard({
                                                     columns={
                                                         isDeliverables ? 8 : 7
                                                     }
-                                                    label="Nu există taskuri active."
+                                                    label={t(
+                                                        'No active tasks.',
+                                                    )}
                                                 />
                                             )}
                                         </TableBody>
@@ -1359,22 +1451,25 @@ export default function PmBoard({
                         {activeSection === 'people' && (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Echipa activă</CardTitle>
+                                    <CardTitle>{t('Active team')}</CardTitle>
                                     <CardDescription>
-                                        Persoanele cu pontaje în perioada
-                                        selectată.
+                                        {t(
+                                            'People with time entries in the selected period.',
+                                        )}
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHead>Persoană</TableHead>
-                                                <TableHead className="text-right">
-                                                    Taskuri
+                                                <TableHead>
+                                                    {t('Person')}
                                                 </TableHead>
                                                 <TableHead className="text-right">
-                                                    Ore
+                                                    {t('Tasks')}
+                                                </TableHead>
+                                                <TableHead className="text-right">
+                                                    {t('Hours')}
                                                 </TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -1388,14 +1483,19 @@ export default function PmBoard({
                                                         {person.tasks}
                                                     </TableCell>
                                                     <TableCell className="text-right tabular-nums">
-                                                        {hours(person.hours)}
+                                                        {hours(
+                                                            person.hours,
+                                                            languageTag,
+                                                        )}
                                                     </TableCell>
                                                 </TableRow>
                                             ))}
                                             {peopleWorked.length === 0 && (
                                                 <EmptyRow
                                                     columns={3}
-                                                    label="Nu există persoane cu pontaje în perioada aleasă."
+                                                    label={t(
+                                                        'No people with time entries in the selected period.',
+                                                    )}
                                                 />
                                             )}
                                         </TableBody>
@@ -1408,30 +1508,34 @@ export default function PmBoard({
                             <Card>
                                 <CardHeader>
                                     <CardTitle>
-                                        Planificare resurse —{' '}
-                                        {planning.weekStart}
+                                        {t('Resource planning — :date', {
+                                            date: planning.weekStart,
+                                        })}
                                     </CardTitle>
                                     <CardDescription>
-                                        Totalurile vin din orele alocate pe
-                                        taskurile bifate în „În progres”.
-                                        Capacitatea este configurabilă per
-                                        persoană.
+                                        {t(
+                                            'Capacity is configured per person. Totals come from hours assigned to selected in-progress tasks.',
+                                        )}
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="overflow-x-auto">
                                     <Table>
                                         <TableHeader>
                                             <TableRow>
-                                                <TableHead>Resursă</TableHead>
-                                                <TableHead>Rol</TableHead>
-                                                <TableHead className="text-right">
-                                                    Capacitate
+                                                <TableHead>
+                                                    {t('Resource')}
+                                                </TableHead>
+                                                <TableHead>
+                                                    {t('Role')}
                                                 </TableHead>
                                                 <TableHead className="text-right">
-                                                    Planificat
+                                                    {t('Capacity')}
                                                 </TableHead>
                                                 <TableHead className="text-right">
-                                                    Disponibil
+                                                    {t('Planned')}
+                                                </TableHead>
+                                                <TableHead className="text-right">
+                                                    {t('Available hours')}
                                                 </TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -1463,12 +1567,14 @@ export default function PmBoard({
                                                             <TableCell className="text-right tabular-nums">
                                                                 {hours(
                                                                     resource.weeklyCapacityHours,
+                                                                    languageTag,
                                                                 )}
                                                             </TableCell>
                                                             <TableCell className="text-right tabular-nums">
                                                                 {hours(
                                                                     total?.plannedHours ??
                                                                         0,
+                                                                    languageTag,
                                                                 )}
                                                             </TableCell>
                                                             <TableCell
@@ -1481,6 +1587,7 @@ export default function PmBoard({
                                                                 {hours(
                                                                     total?.remainingHours ??
                                                                         resource.weeklyCapacityHours,
+                                                                    languageTag,
                                                                 )}
                                                             </TableCell>
                                                         </TableRow>
@@ -1491,7 +1598,9 @@ export default function PmBoard({
                                                 0 && (
                                                 <EmptyRow
                                                     columns={5}
-                                                    label="Nu există resurse interne active."
+                                                    label={t(
+                                                        'No active internal resources.',
+                                                    )}
                                                 />
                                             )}
                                         </TableBody>
@@ -1503,11 +1612,13 @@ export default function PmBoard({
                         {activeSection === 'gantt' && gantt && (
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Gantt livrabile</CardTitle>
+                                    <CardTitle>
+                                        {t('Deliverables Gantt')}
+                                    </CardTitle>
                                     <CardDescription>
-                                        Intervalele provin din datele
-                                        start/deadline ClickUp; săptămâna
-                                        curentă este marcată distinct.
+                                        {t(
+                                            'Intervals come from ClickUp start/deadline dates; the current week is highlighted.',
+                                        )}
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="overflow-x-auto">
@@ -1515,7 +1626,7 @@ export default function PmBoard({
                                         <TableHeader>
                                             <TableRow>
                                                 <TableHead className="sticky left-0 min-w-72 bg-card">
-                                                    Task
+                                                    {t('Task')}
                                                 </TableHead>
                                                 {gantt.weeks.map((week) => (
                                                     <TableHead
@@ -1552,10 +1663,13 @@ export default function PmBoard({
                                                             {row.owners.join(
                                                                 ', ',
                                                             ) ||
-                                                                'Nealocat'}{' '}
+                                                                t(
+                                                                    'Unassigned',
+                                                                )}{' '}
                                                             ·{' '}
                                                             {hours(
                                                                 row.estimateHours,
+                                                                languageTag,
                                                             )}{' '}
                                                             ·{' '}
                                                             {row.progress ===
@@ -1602,7 +1716,9 @@ export default function PmBoard({
                                                     columns={
                                                         gantt.weeks.length + 1
                                                     }
-                                                    label="Taskurile nu au încă date start/deadline."
+                                                    label={t(
+                                                        'Tasks do not have start/deadline dates yet.',
+                                                    )}
                                                 />
                                             )}
                                         </TableBody>

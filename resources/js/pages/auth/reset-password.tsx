@@ -1,10 +1,11 @@
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, setLayoutProps } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { useTranslations } from '@/hooks/use-translations';
 import { update } from '@/routes/password';
 
 type Props = {
@@ -14,9 +15,16 @@ type Props = {
 };
 
 export default function ResetPassword({ token, email, passwordRules }: Props) {
+    const { t } = useTranslations();
+
+    setLayoutProps({
+        title: t('Set a new password'),
+        description: t('Choose a secure password for your HiveOps account.'),
+    });
+
     return (
         <>
-            <Head title="Resetare parolă" />
+            <Head title={t('Password reset')} />
 
             <Form
                 {...update.form()}
@@ -26,7 +34,7 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                 {({ processing, errors }) => (
                     <div className="grid gap-6">
                         <div className="grid gap-2">
-                            <Label htmlFor="email">Adresă de email</Label>
+                            <Label htmlFor="email">{t('Email address')}</Label>
                             <Input
                                 id="email"
                                 type="email"
@@ -43,14 +51,16 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                         </div>
 
                         <div className="grid gap-2">
-                            <Label htmlFor="password">Parolă nouă</Label>
+                            <Label htmlFor="password">
+                                {t('New password')}
+                            </Label>
                             <PasswordInput
                                 id="password"
                                 name="password"
                                 autoComplete="new-password"
                                 className="mt-1 block w-full"
                                 autoFocus
-                                placeholder="Parolă nouă"
+                                placeholder={t('New password')}
                                 passwordrules={passwordRules}
                             />
                             <InputError message={errors.password} />
@@ -58,14 +68,14 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
 
                         <div className="grid gap-2">
                             <Label htmlFor="password_confirmation">
-                                Confirmă parola
+                                {t('Confirm password')}
                             </Label>
                             <PasswordInput
                                 id="password_confirmation"
                                 name="password_confirmation"
                                 autoComplete="new-password"
                                 className="mt-1 block w-full"
-                                placeholder="Confirmă parola"
+                                placeholder={t('Confirm password')}
                                 passwordrules={passwordRules}
                             />
                             <InputError
@@ -81,7 +91,7 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
                             data-test="reset-password-button"
                         >
                             {processing && <Spinner data-icon="inline-start" />}
-                            Salvează parola
+                            {t('Save password')}
                         </Button>
                     </div>
                 )}
@@ -89,8 +99,3 @@ export default function ResetPassword({ token, email, passwordRules }: Props) {
         </>
     );
 }
-
-ResetPassword.layout = {
-    title: 'Setează o parolă nouă',
-    description: 'Alege o parolă sigură pentru contul tău HiveOps.',
-};

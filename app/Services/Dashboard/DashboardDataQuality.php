@@ -74,32 +74,32 @@ class DashboardDataQuality
             issues: $issues,
             key: 'people',
             tone: 'danger',
-            title: 'Pontaje fără persoană mapată',
-            detail: 'Utilizatorul ClickUp nu este asociat unei persoane locale.',
+            title: __('messages.data_quality.unmapped_people_title'),
+            detail: __('messages.data_quality.unmapped_people_detail'),
             stats: $unmappedPeople,
         );
         $this->appendIssue(
             issues: $issues,
             key: 'projects',
             tone: 'danger',
-            title: 'Pontaje fără proiect mapat',
-            detail: 'Locația ClickUp nu este asociată unui proiect sau activităților interne.',
+            title: __('messages.data_quality.unmapped_projects_title'),
+            detail: __('messages.data_quality.unmapped_projects_detail'),
             stats: $unmappedProjects,
         );
         $this->appendIssue(
             issues: $issues,
             key: 'tasks',
             tone: 'warning',
-            title: 'Pontaje fără task local',
-            detail: 'Taskul ClickUp nu a fost găsit în snapshotul local.',
+            title: __('messages.data_quality.missing_tasks_title'),
+            detail: __('messages.data_quality.missing_tasks_detail'),
             stats: $missingTasks,
         );
         $this->appendIssue(
             issues: $issues,
             key: 'inactive_people',
             tone: 'warning',
-            title: 'Pontaje pe persoane inactive',
-            detail: 'Există activitate în perioadă pentru persoane marcate inactive.',
+            title: __('messages.data_quality.inactive_people_title'),
+            detail: __('messages.data_quality.inactive_people_detail'),
             stats: $inactivePeople,
         );
 
@@ -107,10 +107,10 @@ class DashboardDataQuality
             $issues[] = [
                 'key' => 'locations',
                 'tone' => 'danger',
-                'title' => $unmappedLocations === 1
-                    ? '1 folder ClickUp nemapat'
-                    : "$unmappedLocations foldere ClickUp nemapate",
-                'detail' => 'Folderul trebuie asociat unui proiect sau marcat drept intern.',
+                'title' => trans_choice('messages.data_quality.unmapped_locations_title', $unmappedLocations, [
+                    'count' => $unmappedLocations,
+                ]),
+                'detail' => __('messages.data_quality.unmapped_locations_detail'),
                 'count' => $unmappedLocations,
                 'hours' => 0.0,
             ];

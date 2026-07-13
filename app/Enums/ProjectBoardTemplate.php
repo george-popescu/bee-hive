@@ -11,7 +11,7 @@ enum ProjectBoardTemplate: string
     {
         return match ($this) {
             self::TimeAndMaterials => 'Time & Materials',
-            self::Deliverables => 'Livrabile / Fixed',
+            self::Deliverables => __('messages.pm_board.deliverables_template'),
         };
     }
 }

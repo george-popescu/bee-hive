@@ -46,7 +46,7 @@ class AdminSettingController extends Controller
             return response()->json(['updated' => true]);
         }
 
-        return back(status: 303)->with('success', 'Setările generale au fost actualizate.');
+        return back(status: 303)->with('success', __('messages.admin.settings_updated'));
     }
 
     private function payloadKey(string $settingKey): string

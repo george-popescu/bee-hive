@@ -32,7 +32,7 @@ class AdminRoleController extends Controller
 
                 if ($missing !== []) {
                     throw ValidationException::withMessages([
-                        'permission_names' => 'Rolul Admin trebuie să păstreze permisiunile critice de administrare.',
+                        'permission_names' => __('messages.admin.admin_role_must_keep_critical_permissions'),
                     ]);
                 }
             }
@@ -48,6 +48,6 @@ class AdminRoleController extends Controller
             return response()->json(['updated' => true]);
         }
 
-        return back(status: 303)->with('success', 'Permisiunile rolului au fost actualizate.');
+        return back(status: 303)->with('success', __('messages.admin.role_permissions_updated'));
     }
 }

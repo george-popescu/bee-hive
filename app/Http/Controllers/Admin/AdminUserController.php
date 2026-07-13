@@ -33,7 +33,7 @@ class AdminUserController extends Controller
 
         if ($assignsPrivilegedRole && ! $request->user()->can(PermissionName::ManageRolesAndPermissions->value)) {
             throw ValidationException::withMessages([
-                'role_names' => 'Doar utilizatorii care administrează rolurile și permisiunile pot atribui roluri administrative.',
+                'role_names' => __('messages.admin.only_role_managers_can_assign_admin_roles'),
             ]);
         }
 
@@ -58,12 +58,12 @@ class AdminUserController extends Controller
 
             if ($removesAdmin && ! $request->user()->can(PermissionName::ManageRolesAndPermissions->value)) {
                 throw ValidationException::withMessages([
-                    'role_names' => 'Doar utilizatorii care administrează rolurile și permisiunile pot elimina rolul Admin.',
+                    'role_names' => __('messages.admin.only_role_managers_can_remove_admin_role'),
                 ]);
             }
 
             if ($removesAdmin && $adminIds->count() <= 1) {
-                throw ValidationException::withMessages(['role_names' => 'Ultimul administrator nu poate pierde rolul Admin.']);
+                throw ValidationException::withMessages(['role_names' => __('messages.admin.last_admin_cannot_lose_role')]);
             }
 
             $before = ['role_names' => $lockedUser->getRoleNames()->values()->all()];
@@ -77,6 +77,6 @@ class AdminUserController extends Controller
             return response()->json(['updated' => true]);
         }
 
-        return back(status: 303)->with('success', 'Rolurile utilizatorului au fost actualizate.');
+        return back(status: 303)->with('success', __('messages.admin.user_roles_updated'));
     }
 }

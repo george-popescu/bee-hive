@@ -48,7 +48,7 @@ class ActualAdjustmentController extends Controller
             ], 201);
         }
 
-        return back(status: 303)->with('success', 'Ajustarea a fost înregistrată.');
+        return back(status: 303)->with('success', __('messages.adjustments.created'));
     }
 
     public function reverse(
@@ -56,8 +56,8 @@ class ActualAdjustmentController extends Controller
         ActualAdjustment $actualAdjustment,
     ): JsonResponse|RedirectResponse {
         abort_unless(in_array($actualAdjustment->person_id, $this->scope->personIds($request->user()), true), 403);
-        abort_if($actualAdjustment->reverses_adjustment_id !== null, 409, 'O inversare nu poate fi inversată din nou.');
-        abort_if($actualAdjustment->reversedBy()->exists(), 409, 'Ajustarea a fost deja inversată.');
+        abort_if($actualAdjustment->reverses_adjustment_id !== null, 409, __('messages.adjustments.reversal_cannot_be_reversed'));
+        abort_if($actualAdjustment->reversedBy()->exists(), 409, __('messages.adjustments.already_reversed'));
 
         $reversal = $this->adjustments->reverse(
             adjustment: $actualAdjustment,
@@ -75,6 +75,6 @@ class ActualAdjustmentController extends Controller
             ], 201);
         }
 
-        return back(status: 303)->with('success', 'Ajustarea a fost inversată.');
+        return back(status: 303)->with('success', __('messages.adjustments.reversed'));
     }
 }

@@ -302,7 +302,7 @@ final class TeamLeadPlanData
     {
         $label = trim((string) $label);
 
-        return $label === '' ? 'Activitate internă' : $label;
+        return $label === '' ? __('messages.common.internal_activity') : $label;
     }
 
     /** @return array{id: null, label: string, internal: true} */

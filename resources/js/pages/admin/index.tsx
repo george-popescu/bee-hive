@@ -1,4 +1,4 @@
-import { Head, useForm } from '@inertiajs/react';
+import { Head, setLayoutProps, useForm } from '@inertiajs/react';
 import { Edit3, Save, Settings2, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -45,6 +45,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useTranslations } from '@/hooks/use-translations';
 
 type Person = {
     id: number;
@@ -105,6 +106,7 @@ function FieldError({ message }: { message?: string }) {
 }
 
 function PersonDialog({ person }: { person: Person }) {
+    const { t } = useTranslations();
     const [open, setOpen] = useState(false);
     const form = useForm({
         job_role: person.jobRole ?? '',
@@ -125,7 +127,7 @@ function PersonDialog({ person }: { person: Person }) {
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
                 <Button size="sm" variant="outline">
-                    <Edit3 /> Configurează
+                    <Edit3 /> {t('Configure')}
                 </Button>
             </DialogTrigger>
             <DialogContent>
@@ -133,13 +135,14 @@ function PersonDialog({ person }: { person: Person }) {
                     <DialogHeader>
                         <DialogTitle>{person.name}</DialogTitle>
                         <DialogDescription>
-                            Numele, emailul și identitatea ClickUp sunt
-                            read-only. Aici gestionezi doar datele interne.
+                            {t(
+                                'Name, email, and ClickUp identity are read-only. Only internal data is managed here.',
+                            )}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <label className="grid gap-2">
-                            <Label>Rol principal</Label>
+                            <Label>{t('Primary role')}</Label>
                             <Input
                                 value={form.data.job_role}
                                 onChange={(e) =>
@@ -149,7 +152,7 @@ function PersonDialog({ person }: { person: Person }) {
                             <FieldError message={form.errors.job_role} />
                         </label>
                         <label className="grid gap-2">
-                            <Label>Normă lunară (h)</Label>
+                            <Label>{t('Monthly capacity (h)')}</Label>
                             <Input
                                 type="number"
                                 min={1}
@@ -169,7 +172,7 @@ function PersonDialog({ person }: { person: Person }) {
                             />
                         </label>
                         <label className="grid gap-2">
-                            <Label>Capacitate săptămânală (h)</Label>
+                            <Label>{t('Weekly capacity (h)')}</Label>
                             <Input
                                 type="number"
                                 min={0}
@@ -189,7 +192,7 @@ function PersonDialog({ person }: { person: Person }) {
                             />
                         </label>
                         <label className="grid gap-2">
-                            <Label>Tarif orar</Label>
+                            <Label>{t('Hourly rate')}</Label>
                             <Input
                                 type="number"
                                 min={0}
@@ -214,11 +217,11 @@ function PersonDialog({ person }: { person: Person }) {
                                 form.setData('active', value === true)
                             }
                         />{' '}
-                        Activ în planificare și rapoarte
+                        {t('Active in planning and reports')}
                     </label>
                     <DialogFooter>
                         <Button disabled={form.processing} type="submit">
-                            <Save /> Salvează
+                            <Save /> {t('Save')}
                         </Button>
                     </DialogFooter>
                 </form>
@@ -234,6 +237,7 @@ function ProjectDialog({
     project: Project;
     managers: NonNullable<Props['managers']>;
 }) {
+    const { t } = useTranslations();
     const [open, setOpen] = useState(false);
     const form = useForm({
         contract_type: project.contractType,
@@ -277,7 +281,7 @@ function ProjectDialog({
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
                 <Button size="sm" variant="outline">
-                    <Edit3 /> Configurează
+                    <Edit3 /> {t('Configure')}
                 </Button>
             </DialogTrigger>
             <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
@@ -285,13 +289,14 @@ function ProjectDialog({
                     <DialogHeader>
                         <DialogTitle>{project.label}</DialogTitle>
                         <DialogDescription>
-                            Template-ul, vizibilitatea, PM-ii și regulile
-                            board-ului sunt configurații locale.
+                            {t(
+                                'The template, visibility, project managers, and board rules are local settings.',
+                            )}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <label className="grid gap-2">
-                            <Label>Template board</Label>
+                            <Label>{t('Board template')}</Label>
                             <Select
                                 value={form.data.contract_type}
                                 onValueChange={(value) =>
@@ -309,7 +314,7 @@ function ProjectDialog({
                                         Time & Materials
                                     </SelectItem>
                                     <SelectItem value="deliverables">
-                                        Livrabile / Fixed
+                                        {t('Deliverables / Fixed')}
                                     </SelectItem>
                                 </SelectContent>
                             </Select>
@@ -322,7 +327,7 @@ function ProjectDialog({
                                         form.setData('active', value === true)
                                     }
                                 />{' '}
-                                Proiect activ
+                                {t('Active project')}
                             </label>
                             <label className="flex items-center gap-2">
                                 <Checkbox
@@ -334,12 +339,12 @@ function ProjectDialog({
                                         )
                                     }
                                 />{' '}
-                                Board vizibil
+                                {t('Visible board')}
                             </label>
                         </div>
                     </div>
                     <div className="space-y-2">
-                        <Label>Project Managers</Label>
+                        <Label>{t('Project Managers')}</Label>
                         <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">
                             {managers.map((manager) => (
                                 <label
@@ -365,7 +370,7 @@ function ProjectDialog({
                         <FieldError message={form.errors.manager_ids} />
                     </div>
                     <div className="space-y-2">
-                        <Label>Pool resurse pentru planificare</Label>
+                        <Label>{t('Planning resource pool')}</Label>
                         <div className="grid max-h-48 gap-2 overflow-y-auto rounded-md border p-3 sm:grid-cols-2">
                             {managers.map((manager) => (
                                 <label
@@ -390,7 +395,7 @@ function ProjectDialog({
                     </div>
                     <label className="grid gap-2">
                         <Label>
-                            ID-uri taskuri recurente excluse (unul pe linie)
+                            {t('Excluded recurring task IDs (one per line)')}
                         </Label>
                         <Textarea
                             rows={5}
@@ -411,7 +416,7 @@ function ProjectDialog({
                     </label>
                     <DialogFooter>
                         <Button disabled={form.processing} type="submit">
-                            <Save /> Salvează
+                            <Save /> {t('Save')}
                         </Button>
                     </DialogFooter>
                 </form>
@@ -421,6 +426,7 @@ function ProjectDialog({
 }
 
 function UserRoles({ user, roles }: { user: UserRow; roles: RoleRow[] }) {
+    const { t } = useTranslations();
     const form = useForm({ role_names: user.roles });
     const toggle = (name: string, enabled: boolean) =>
         form.setData(
@@ -457,7 +463,7 @@ function UserRoles({ user, roles }: { user: UserRow; roles: RoleRow[] }) {
                 </label>
             ))}
             <Button size="sm" disabled={form.processing} type="submit">
-                Salvează roluri
+                {t('Save roles')}
             </Button>
             <FieldError message={form.errors.role_names} />
         </form>
@@ -471,6 +477,7 @@ function RolePermissions({
     role: RoleRow;
     permissions: string[];
 }) {
+    const { t } = useTranslations();
     const form = useForm({ permission_names: role.permissions });
     const toggle = (name: string, enabled: boolean) =>
         form.setData(
@@ -493,7 +500,7 @@ function RolePermissions({
             <div className="flex items-center justify-between">
                 <h3 className="font-semibold">{role.name}</h3>
                 <Button size="sm" disabled={form.processing} type="submit">
-                    Salvează permisiuni
+                    {t('Save permissions')}
                 </Button>
             </div>
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
@@ -524,6 +531,7 @@ function GeneralSettings({
 }: {
     settings: NonNullable<Props['settings']>;
 }) {
+    const { t } = useTranslations();
     const form = useForm({
         active_period_start: String(
             settings['planning.active_start'] ?? '',
@@ -543,9 +551,11 @@ function GeneralSettings({
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Setări generale</CardTitle>
+                <CardTitle>{t('General settings')}</CardTitle>
                 <CardDescription>
-                    Orizontul activ și valorile implicite folosite de calcule.
+                    {t(
+                        'The active horizon and default values used in calculations.',
+                    )}
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -559,7 +569,7 @@ function GeneralSettings({
                     className="grid gap-4 sm:grid-cols-2"
                 >
                     <label className="grid gap-2">
-                        <Label>Început perioadă</Label>
+                        <Label>{t('Period start')}</Label>
                         <Input
                             type="month"
                             value={form.data.active_period_start}
@@ -573,7 +583,7 @@ function GeneralSettings({
                         <FieldError message={form.errors.active_period_start} />
                     </label>
                     <label className="grid gap-2">
-                        <Label>Sfârșit perioadă</Label>
+                        <Label>{t('Period end')}</Label>
                         <Input
                             type="month"
                             value={form.data.active_period_end}
@@ -587,7 +597,7 @@ function GeneralSettings({
                         <FieldError message={form.errors.active_period_end} />
                     </label>
                     <label className="grid gap-2">
-                        <Label>Normă lunară implicită</Label>
+                        <Label>{t('Default monthly capacity')}</Label>
                         <Input
                             type="number"
                             min={1}
@@ -605,7 +615,7 @@ function GeneralSettings({
                         />
                     </label>
                     <label className="grid gap-2">
-                        <Label>Ore / zi concediu</Label>
+                        <Label>{t('Hours / leave day')}</Label>
                         <Input
                             type="number"
                             min={0.25}
@@ -623,7 +633,7 @@ function GeneralSettings({
                     </label>
                     <div className="sm:col-span-2">
                         <Button disabled={form.processing} type="submit">
-                            <Save /> Salvează setările
+                            <Save /> {t('Save settings')}
                         </Button>
                     </div>
                 </form>
@@ -643,22 +653,28 @@ export default function AdminIndex({
     auditLogs = [],
     capabilities,
 }: Props) {
+    const { languageTag, t } = useTranslations();
     const [section, setSection] = useState<Section>(
         capabilities.manageSettings ? 'people' : 'access',
     );
 
+    setLayoutProps({ title: t('Administration') });
+
     return (
         <>
-            <Head title="Administrare" />
+            <Head title={t('Administration')} />
             <div className="flex h-full flex-1 flex-col gap-4 p-4">
                 <div className="space-y-2">
                     <div className="flex items-center gap-2">
                         <Settings2 className="size-6" />
-                        <h1 className="text-2xl font-semibold">Administrare</h1>
+                        <h1 className="text-2xl font-semibold">
+                            {t('Administration')}
+                        </h1>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                        Configurații operaționale, acces și jurnalul
-                        schimbărilor importante.
+                        {t(
+                            'Operational settings, access, and the log of important changes.',
+                        )}
                     </p>
                 </div>
                 <ToggleGroup
@@ -673,41 +689,51 @@ export default function AdminIndex({
                     {capabilities.manageSettings && (
                         <>
                             <ToggleGroupItem value="people">
-                                Echipă
+                                {t('Team')}
                             </ToggleGroupItem>
                             <ToggleGroupItem value="projects">
-                                Proiecte
+                                {t('Projects')}
                             </ToggleGroupItem>
                             <ToggleGroupItem value="settings">
-                                Setări
+                                {t('Settings')}
                             </ToggleGroupItem>
                         </>
                     )}
                     {(capabilities.manageUsers || capabilities.manageRoles) && (
-                        <ToggleGroupItem value="access">Acces</ToggleGroupItem>
+                        <ToggleGroupItem value="access">
+                            {t('Access')}
+                        </ToggleGroupItem>
                     )}
                     {capabilities.viewAudit && (
-                        <ToggleGroupItem value="audit">Audit</ToggleGroupItem>
+                        <ToggleGroupItem value="audit">
+                            {t('Audit')}
+                        </ToggleGroupItem>
                     )}
                 </ToggleGroup>
                 {section === 'people' && capabilities.manageSettings && (
                     <Card>
                         <CardHeader>
-                            <CardTitle>Echipă</CardTitle>
+                            <CardTitle>{t('Team')}</CardTitle>
                             <CardDescription>
-                                {people.length} persoane sincronizate;
-                                identitatea ClickUp nu se editează aici.
+                                {t(
+                                    ':count synchronized people; ClickUp identity cannot be edited here.',
+                                    { count: people.length },
+                                )}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="overflow-x-auto">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Persoană</TableHead>
-                                        <TableHead>Rol</TableHead>
-                                        <TableHead>Normă lunară</TableHead>
-                                        <TableHead>Cap. săpt.</TableHead>
-                                        <TableHead>Stare</TableHead>
+                                        <TableHead>{t('Person')}</TableHead>
+                                        <TableHead>{t('Role')}</TableHead>
+                                        <TableHead>
+                                            {t('Monthly capacity')}
+                                        </TableHead>
+                                        <TableHead>
+                                            {t('Weekly capacity')}
+                                        </TableHead>
+                                        <TableHead>{t('Status')}</TableHead>
                                         <TableHead />
                                     </TableRow>
                                 </TableHeader>
@@ -720,9 +746,9 @@ export default function AdminIndex({
                                                 </div>
                                                 <div className="text-xs text-muted-foreground">
                                                     {person.email ??
-                                                        'fără email'}{' '}
+                                                        t('no email')}{' '}
                                                     {person.external &&
-                                                        '· extern'}
+                                                        `· ${t('external')}`}
                                                 </div>
                                             </TableCell>
                                             <TableCell>
@@ -734,7 +760,7 @@ export default function AdminIndex({
                                             <TableCell>
                                                 {person.weeklyCapacityHours ===
                                                 null
-                                                    ? 'automat'
+                                                    ? t('automatic')
                                                     : `${person.weeklyCapacityHours}h`}
                                             </TableCell>
                                             <TableCell>
@@ -746,8 +772,8 @@ export default function AdminIndex({
                                                     }
                                                 >
                                                     {person.active
-                                                        ? 'activ'
-                                                        : 'inactiv'}
+                                                        ? t('active')
+                                                        : t('inactive')}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-right">
@@ -763,20 +789,21 @@ export default function AdminIndex({
                 {section === 'projects' && capabilities.manageSettings && (
                     <Card>
                         <CardHeader>
-                            <CardTitle>Proiecte și board-uri</CardTitle>
+                            <CardTitle>{t('Projects and boards')}</CardTitle>
                             <CardDescription>
-                                Maparea PM și template-ul sunt interne; numele
-                                proiectului rămâne sincronizat.
+                                {t(
+                                    'Project manager mapping and templates are internal; project names remain synchronized.',
+                                )}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="overflow-x-auto">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Proiect</TableHead>
-                                        <TableHead>Template</TableHead>
+                                        <TableHead>{t('Project')}</TableHead>
+                                        <TableHead>{t('Template')}</TableHead>
                                         <TableHead>PM</TableHead>
-                                        <TableHead>Stare</TableHead>
+                                        <TableHead>{t('Status')}</TableHead>
                                         <TableHead />
                                     </TableRow>
                                 </TableHeader>
@@ -790,7 +817,9 @@ export default function AdminIndex({
                                                 <Badge variant="outline">
                                                     {project.contractType ===
                                                     'deliverables'
-                                                        ? 'Livrabile / Fixed'
+                                                        ? t(
+                                                              'Deliverables / Fixed',
+                                                          )
                                                         : 'T&M'}
                                                 </Badge>
                                             </TableCell>
@@ -809,12 +838,12 @@ export default function AdminIndex({
                                             </TableCell>
                                             <TableCell>
                                                 {project.active
-                                                    ? 'activ'
-                                                    : 'inactiv'}{' '}
+                                                    ? t('active')
+                                                    : t('inactive')}{' '}
                                                 ·{' '}
                                                 {project.boardVisible
-                                                    ? 'vizibil'
-                                                    : 'ascuns'}
+                                                    ? t('visible')
+                                                    : t('hidden')}
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <ProjectDialog
@@ -836,13 +865,13 @@ export default function AdminIndex({
                                 <Card>
                                     <CardHeader>
                                         <CardTitle className="flex items-center gap-2">
-                                            <ShieldCheck /> Utilizatori și
-                                            roluri
+                                            <ShieldCheck />{' '}
+                                            {t('Users and roles')}
                                         </CardTitle>
                                         <CardDescription>
-                                            Rolurile implicite vin cu permisiuni
-                                            sigure, dar pot fi ajustate de
-                                            Admin.
+                                            {t(
+                                                'Default roles have safe permissions and can be adjusted by an administrator.',
+                                            )}
                                         </CardDescription>
                                     </CardHeader>
                                     <CardContent className="space-y-3">
@@ -860,12 +889,12 @@ export default function AdminIndex({
                                 <Card>
                                     <CardHeader>
                                         <CardTitle>
-                                            Permisiuni per rol
+                                            {t('Permissions by role')}
                                         </CardTitle>
                                         <CardDescription>
-                                            Rolul Admin nu poate pierde
-                                            capabilitățile critice care previn
-                                            blocarea accesului.
+                                            {t(
+                                                'The Admin role cannot lose the critical capabilities that prevent access lockout.',
+                                            )}
                                         </CardDescription>
                                     </CardHeader>
                                     <CardContent className="space-y-4">
@@ -887,21 +916,22 @@ export default function AdminIndex({
                 {section === 'audit' && capabilities.viewAudit && (
                     <Card>
                         <CardHeader>
-                            <CardTitle>Jurnal audit</CardTitle>
+                            <CardTitle>{t('Audit log')}</CardTitle>
                             <CardDescription>
-                                Ultimele {auditLogs.length} modificări
-                                importante.
+                                {t('Latest :count important changes.', {
+                                    count: auditLogs.length,
+                                })}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="overflow-x-auto">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Moment</TableHead>
-                                        <TableHead>Autor</TableHead>
-                                        <TableHead>Acțiune</TableHead>
-                                        <TableHead>Subiect</TableHead>
-                                        <TableHead>Schimbare</TableHead>
+                                        <TableHead>{t('Time')}</TableHead>
+                                        <TableHead>{t('Author')}</TableHead>
+                                        <TableHead>{t('Action')}</TableHead>
+                                        <TableHead>{t('Subject')}</TableHead>
+                                        <TableHead>{t('Change')}</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -911,7 +941,9 @@ export default function AdminIndex({
                                                 {log.createdAt
                                                     ? new Date(
                                                           log.createdAt,
-                                                      ).toLocaleString('ro-RO')
+                                                      ).toLocaleString(
+                                                          languageTag,
+                                                      )
                                                     : '—'}
                                             </TableCell>
                                             <TableCell>{log.actor}</TableCell>

@@ -62,7 +62,7 @@ class UpsertWeeklyPlanningRequest extends FormRequest
                     $timestamp = is_string($value) ? strtotime($value) : false;
 
                     if ($timestamp === false || date('N', $timestamp) !== '1') {
-                        $fail('Săptămâna trebuie să înceapă luni.');
+                        $fail(__('messages.pm_board.week_must_start_on_monday'));
                     }
                 },
             ],

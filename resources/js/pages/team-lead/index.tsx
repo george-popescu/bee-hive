@@ -1,4 +1,10 @@
-import { Head, useForm, useHttp, usePage } from '@inertiajs/react';
+import {
+    Head,
+    setLayoutProps,
+    useForm,
+    useHttp,
+    usePage,
+} from '@inertiajs/react';
 import {
     Check,
     ChevronDown,
@@ -63,6 +69,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useTranslations } from '@/hooks/use-translations';
 import { index as teamLeadIndex } from '@/routes/team_lead';
 
 type Month = { key: string; label: string };
@@ -147,20 +154,12 @@ type AdjustmentPayload = {
 };
 type ReversalPayload = { reason: string };
 
-const varianceLabels: Record<VarianceStatus, string> = {
-    empty: 'Fără date',
-    'on-plan': 'În plan (±10%)',
-    'significant-variance': 'Abatere semnificativă (>25%)',
-    neutral: 'Abatere moderată',
-    unplanned: 'Ore neplanificate',
-};
-
-function formatHours(value: number | null): string {
+function formatHours(value: number | null, locale: string): string {
     if (value === null) {
         return '—';
     }
 
-    return value.toLocaleString('ro-RO', { maximumFractionDigits: 2 });
+    return value.toLocaleString(locale, { maximumFractionDigits: 2 });
 }
 
 function localIsoDate(date: Date): string {
@@ -192,8 +191,8 @@ function defaultEffectiveDate(months: Month[]): string {
     return today < firstDate ? firstDate : today > lastDate ? lastDate : today;
 }
 
-function formatDate(date: string): string {
-    return new Intl.DateTimeFormat('ro-RO', {
+function formatDate(date: string, locale: string): string {
+    return new Intl.DateTimeFormat(locale, {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -234,6 +233,7 @@ function PlanHoursInput({
     month: string;
     canEdit: boolean;
 }) {
+    const { t } = useTranslations();
     const initialValue = row.hours[month] ?? 0;
     const [confirmedValue, setConfirmedValue] = useState(initialValue);
     const [draft, setDraft] = useState(
@@ -256,7 +256,7 @@ function PlanHoursInput({
         setDraft(confirmedValue === 0 ? '' : String(confirmedValue));
         form.setData('planned_hours', confirmedValue);
         toast.error(
-            'Orele nu au putut fi salvate. Valoarea anterioară a fost restaurată.',
+            t('Hours could not be saved. The previous value was restored.'),
         );
     };
 
@@ -317,8 +317,10 @@ function PlanHoursInput({
                 step={0.25}
                 title={
                     percentage === null
-                        ? 'Fără normă configurată'
-                        : `${percentage}% din norma lunară`
+                        ? t('No capacity configured')
+                        : t(':percentage of monthly capacity', {
+                              percentage: `${percentage}%`,
+                          })
                 }
                 type="number"
                 value={draft}
@@ -335,24 +337,40 @@ function PlanHoursInput({
 }
 
 function PersonLabel({ person }: { person: Person }) {
+    const { t } = useTranslations();
+
     return (
         <span className="flex items-center gap-2">
             {person.name}
-            {person.isExternal && <Badge variant="secondary">extern</Badge>}
+            {person.isExternal && (
+                <Badge variant="secondary">{t('external')}</Badge>
+            )}
         </span>
     );
 }
 
 function ProjectLabel({ project }: { project: Project }) {
+    const { t } = useTranslations();
+
     return (
         <span className="flex items-center gap-2">
             {project.label}
-            {project.internal && <Badge variant="outline">intern</Badge>}
+            {project.internal && (
+                <Badge variant="outline">{t('internal')}</Badge>
+            )}
         </span>
     );
 }
 
 function VarianceValue({ month }: { month: BoardMonth }) {
+    const { languageTag, t } = useTranslations();
+    const varianceLabels: Record<VarianceStatus, string> = {
+        empty: t('No data'),
+        'on-plan': t('On plan (±10%)'),
+        'significant-variance': t('Significant variance (>25%)'),
+        neutral: t('Moderate variance'),
+        unplanned: t('Unplanned hours'),
+    };
     const variant =
         month.status === 'significant-variance' || month.status === 'unplanned'
             ? 'destructive'
@@ -364,7 +382,7 @@ function VarianceValue({ month }: { month: BoardMonth }) {
 
     return (
         <Badge variant={variant} title={varianceLabels[month.status]}>
-            {formatHours(month.actual)}
+            {formatHours(month.actual, languageTag)}
         </Badge>
     );
 }
@@ -378,6 +396,7 @@ function PlanTable({
     months: Month[];
     canEdit: boolean;
 }) {
+    const { languageTag, t } = useTranslations();
     const total = (subset: PlanRow[], month: string) =>
         subset.reduce((sum, row) => sum + (row.hours[month] ?? 0), 0);
 
@@ -386,13 +405,13 @@ function PlanTable({
             <TableHeader>
                 <TableRow>
                     <TableHead className="sticky top-0 left-0 min-w-48 bg-card">
-                        Persoană
+                        {t('Person')}
                     </TableHead>
                     <TableHead className="sticky top-0 min-w-64 bg-card">
-                        Proiect
+                        {t('Project')}
                     </TableHead>
                     <TableHead className="sticky top-0 min-w-28 bg-card">
-                        Rol
+                        {t('Role')}
                     </TableHead>
                     {months.map((month) => (
                         <TableHead
@@ -444,7 +463,9 @@ function PlanTable({
                             {lastForPerson && (
                                 <TableRow className="bg-muted/40 font-medium">
                                     <TableCell className="sticky left-0 bg-muted">
-                                        Total {row.person.name}
+                                        {t('Total :name', {
+                                            name: row.person.name,
+                                        })}
                                     </TableCell>
                                     <TableCell colSpan={2} />
                                     {months.map((month) => (
@@ -454,6 +475,7 @@ function PlanTable({
                                         >
                                             {formatHours(
                                                 total(personRows, month.key),
+                                                languageTag,
                                             )}
                                         </TableCell>
                                     ))}
@@ -465,14 +487,14 @@ function PlanTable({
             </TableBody>
             <TableFooter>
                 <TableRow>
-                    <TableCell>Total general</TableCell>
+                    <TableCell>{t('Grand total')}</TableCell>
                     <TableCell colSpan={2} />
                     {months.map((month) => (
                         <TableCell
                             key={month.key}
                             className="text-right tabular-nums"
                         >
-                            {formatHours(total(rows, month.key))}
+                            {formatHours(total(rows, month.key), languageTag)}
                         </TableCell>
                     ))}
                 </TableRow>
@@ -490,6 +512,7 @@ function ActualTable({
     months: Month[];
     comparison: boolean;
 }) {
+    const { languageTag, t } = useTranslations();
     const actualTotal = (subset: BoardRow[], month: string): number | null => {
         const values = subset
             .map((row) => row.months[month]?.actual ?? null)
@@ -520,13 +543,13 @@ function ActualTable({
                         rowSpan={comparison ? 2 : 1}
                         className="sticky top-0 left-0 min-w-48 bg-card"
                     >
-                        Persoană
+                        {t('Person')}
                     </TableHead>
                     <TableHead
                         rowSpan={comparison ? 2 : 1}
                         className="sticky top-0 min-w-64 bg-card"
                     >
-                        Proiect / activitate
+                        {t('Project / activity')}
                     </TableHead>
                     {months.map((month) => (
                         <TableHead
@@ -545,13 +568,13 @@ function ActualTable({
                                 key={`${month.key}-planned`}
                                 className="sticky top-10 min-w-24 bg-card text-right"
                             >
-                                Plan
+                                {t('Plan')}
                             </TableHead>,
                             <TableHead
                                 key={`${month.key}-actual`}
                                 className="sticky top-10 min-w-28 bg-card text-right"
                             >
-                                Realizat
+                                {t('Actual')}
                             </TableHead>,
                         ])}
                     </TableRow>
@@ -589,7 +612,10 @@ function ActualTable({
                                                   key={`${month.key}-planned`}
                                                   className="text-right tabular-nums"
                                               >
-                                                  {formatHours(value.planned)}
+                                                  {formatHours(
+                                                      value.planned,
+                                                      languageTag,
+                                                  )}
                                               </TableCell>,
                                               <TableCell
                                                   key={`${month.key}-actual`}
@@ -605,7 +631,10 @@ function ActualTable({
                                                   key={`${month.key}-actual`}
                                                   className="text-right tabular-nums"
                                               >
-                                                  {formatHours(value.actual)}
+                                                  {formatHours(
+                                                      value.actual,
+                                                      languageTag,
+                                                  )}
                                               </TableCell>,
                                           ];
                                 })}
@@ -613,7 +642,9 @@ function ActualTable({
                             {lastForPerson && (
                                 <TableRow className="bg-muted/40 font-medium">
                                     <TableCell className="sticky left-0 bg-muted">
-                                        Total {row.person.name}
+                                        {t('Total :name', {
+                                            name: row.person.name,
+                                        })}
                                     </TableCell>
                                     <TableCell />
                                     {months.flatMap((month) =>
@@ -628,6 +659,7 @@ function ActualTable({
                                                               personRows,
                                                               month.key,
                                                           ),
+                                                          languageTag,
                                                       )}
                                                   </TableCell>,
                                                   <TableCell
@@ -652,6 +684,7 @@ function ActualTable({
                                                               personRows,
                                                               month.key,
                                                           ),
+                                                          languageTag,
                                                       )}
                                                   </TableCell>,
                                               ],
@@ -664,7 +697,7 @@ function ActualTable({
             </TableBody>
             <TableFooter>
                 <TableRow>
-                    <TableCell>Total general</TableCell>
+                    <TableCell>{t('Grand total')}</TableCell>
                     <TableCell />
                     {months.flatMap((month) =>
                         comparison
@@ -675,6 +708,7 @@ function ActualTable({
                                   >
                                       {formatHours(
                                           plannedTotal(rows, month.key),
+                                          languageTag,
                                       )}
                                   </TableCell>,
                                   <TableCell
@@ -693,6 +727,7 @@ function ActualTable({
                                   >
                                       {formatHours(
                                           actualTotal(rows, month.key),
+                                          languageTag,
                                       )}
                                   </TableCell>,
                               ],
@@ -716,6 +751,7 @@ function AdjustmentDialog({
     projects: Props['projects'];
     months: Month[];
 }) {
+    const { t } = useTranslations();
     const activeProjects = projects.filter(
         (project) => project.active !== false,
     );
@@ -737,12 +773,12 @@ function AdjustmentDialog({
         form.post(storeAdjustment.url(), {
             preserveScroll: true,
             onSuccess: () => {
-                toast.success('Ajustarea a fost înregistrată.');
+                toast.success(t('The adjustment was recorded.'));
                 onOpenChange(false);
                 form.reset();
             },
             onError: () =>
-                toast.error('Verifică datele ajustării și încearcă din nou.'),
+                toast.error(t('Verify the adjustment data and try again.')),
         });
     };
 
@@ -750,15 +786,16 @@ function AdjustmentDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Adaugă ajustare realizat</DialogTitle>
+                    <DialogTitle>{t('Add actual adjustment')}</DialogTitle>
                     <DialogDescription>
-                        Ajustarea este auditată și nu modifică pontajele sursă
-                        din ClickUp.
+                        {t(
+                            'The adjustment is audited and does not change the source time entries in ClickUp.',
+                        )}
                     </DialogDescription>
                 </DialogHeader>
                 <form className="flex flex-col gap-5" onSubmit={submit}>
                     <div className="flex flex-col gap-2">
-                        <Label htmlFor="adjustment-person">Persoană</Label>
+                        <Label htmlFor="adjustment-person">{t('Person')}</Label>
                         <Select
                             value={String(form.data.person_id)}
                             onValueChange={(value) =>
@@ -766,7 +803,9 @@ function AdjustmentDialog({
                             }
                         >
                             <SelectTrigger id="adjustment-person">
-                                <SelectValue placeholder="Alege persoana" />
+                                <SelectValue
+                                    placeholder={t('Choose a person')}
+                                />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
@@ -789,7 +828,7 @@ function AdjustmentDialog({
                     </div>
                     <div className="flex flex-col gap-2">
                         <Label htmlFor="adjustment-project">
-                            Proiect / activitate
+                            {t('Project / activity')}
                         </Label>
                         <Select
                             value={
@@ -805,12 +844,14 @@ function AdjustmentDialog({
                             }
                         >
                             <SelectTrigger id="adjustment-project">
-                                <SelectValue placeholder="Alege proiectul" />
+                                <SelectValue
+                                    placeholder={t('Choose a project')}
+                                />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectGroup>
                                     <SelectItem value="internal">
-                                        Activitate internă
+                                        {t('Internal activity')}
                                     </SelectItem>
                                     {activeProjects.map((project) => (
                                         <SelectItem
@@ -827,7 +868,7 @@ function AdjustmentDialog({
                     {form.data.project_id === null && (
                         <div className="flex flex-col gap-2">
                             <Label htmlFor="adjustment-label">
-                                Etichetă activitate internă
+                                {t('Internal activity label')}
                             </Label>
                             <Input
                                 id="adjustment-label"
@@ -852,7 +893,7 @@ function AdjustmentDialog({
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="flex flex-col gap-2">
                             <Label htmlFor="adjustment-date">
-                                Data ajustării
+                                {t('Adjustment date')}
                             </Label>
                             <Input
                                 id="adjustment-date"
@@ -878,7 +919,7 @@ function AdjustmentDialog({
                         </div>
                         <div className="flex flex-col gap-2">
                             <Label htmlFor="adjustment-hours">
-                                Ore de adăugat / scăzut
+                                {t('Hours to add / subtract')}
                             </Label>
                             <Input
                                 id="adjustment-hours"
@@ -892,7 +933,7 @@ function AdjustmentDialog({
                                             : Number(event.target.value),
                                     )
                                 }
-                                placeholder="ex. +2,5 sau -1"
+                                placeholder={t('e.g. +2.5 or -1')}
                                 step={0.25}
                                 type="number"
                                 value={form.data.hours_delta}
@@ -903,20 +944,23 @@ function AdjustmentDialog({
                                 </p>
                             )}
                             <p className="text-xs text-muted-foreground">
-                                Valoare pozitivă pentru adăugare, negativă
-                                pentru scădere.
+                                {t(
+                                    'Enter a positive value to add hours and a negative value to subtract hours.',
+                                )}
                             </p>
                         </div>
                     </div>
                     <div className="flex flex-col gap-2">
-                        <Label htmlFor="adjustment-reason">Motiv</Label>
+                        <Label htmlFor="adjustment-reason">{t('Reason')}</Label>
                         <Textarea
                             id="adjustment-reason"
                             aria-invalid={Boolean(form.errors.reason)}
                             onChange={(event) =>
                                 form.setData('reason', event.target.value)
                             }
-                            placeholder="Descrie motivul corecției"
+                            placeholder={t(
+                                'Describe the reason for the correction',
+                            )}
                             value={form.data.reason}
                         />
                         {form.errors.reason && (
@@ -931,7 +975,7 @@ function AdjustmentDialog({
                             variant="outline"
                             onClick={() => onOpenChange(false)}
                         >
-                            Renunță
+                            {t('Cancel')}
                         </Button>
                         <Button type="submit" disabled={form.processing}>
                             {form.processing && (
@@ -940,7 +984,7 @@ function AdjustmentDialog({
                                     className="animate-spin"
                                 />
                             )}
-                            Înregistrează ajustarea
+                            {t('Record adjustment')}
                         </Button>
                     </DialogFooter>
                 </form>
@@ -954,6 +998,7 @@ function ReverseAdjustmentButton({
 }: {
     adjustment: AdjustmentRecord;
 }) {
+    const { languageTag, t } = useTranslations();
     const [open, setOpen] = useState(false);
     const form = useForm<ReversalPayload>({ reason: '' });
     const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -961,11 +1006,12 @@ function ReverseAdjustmentButton({
         form.post(reverseAdjustment.url(adjustment.id), {
             preserveScroll: true,
             onSuccess: () => {
-                toast.success('Ajustarea a fost inversată.');
+                toast.success(t('The adjustment was reversed.'));
                 setOpen(false);
                 form.reset();
             },
-            onError: () => toast.error('Ajustarea nu a putut fi inversată.'),
+            onError: () =>
+                toast.error(t('The adjustment could not be reversed.')),
         });
     };
 
@@ -978,21 +1024,29 @@ function ReverseAdjustmentButton({
                 onClick={() => setOpen(true)}
             >
                 <Undo2 data-icon="inline-start" />
-                {adjustment.isReversed ? 'Inversată' : 'Inversează'}
+                {adjustment.isReversed
+                    ? t('Adjustment reversed')
+                    : t('Reverse')}
             </Button>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Inversează ajustarea</DialogTitle>
+                    <DialogTitle>{t('Reverse adjustment')}</DialogTitle>
                     <DialogDescription>
-                        Se va crea o înregistrare opusă de{' '}
-                        {formatHours(-adjustment.hoursDelta)} ore. Istoricul
-                        original rămâne neschimbat.
+                        {t(
+                            'A reversing record of :hours hours will be created. The original history remains unchanged.',
+                            {
+                                hours: formatHours(
+                                    -adjustment.hoursDelta,
+                                    languageTag,
+                                ),
+                            },
+                        )}
                     </DialogDescription>
                 </DialogHeader>
                 <form className="flex flex-col gap-5" onSubmit={submit}>
                     <div className="flex flex-col gap-2">
                         <Label htmlFor={`reversal-reason-${adjustment.id}`}>
-                            Motivul inversării
+                            {t('Reason for reversal')}
                         </Label>
                         <Textarea
                             id={`reversal-reason-${adjustment.id}`}
@@ -1014,7 +1068,7 @@ function ReverseAdjustmentButton({
                             variant="outline"
                             onClick={() => setOpen(false)}
                         >
-                            Renunță
+                            {t('Cancel')}
                         </Button>
                         <Button type="submit" disabled={form.processing}>
                             {form.processing && (
@@ -1023,7 +1077,7 @@ function ReverseAdjustmentButton({
                                     className="animate-spin"
                                 />
                             )}
-                            Confirmă inversarea
+                            {t('Confirm reversal')}
                         </Button>
                     </DialogFooter>
                 </form>
@@ -1039,39 +1093,50 @@ function AdjustmentHistory({
     adjustments: AdjustmentRecord[];
     canReverse: boolean;
 }) {
+    const { languageTag, t } = useTranslations();
+
     return (
         <Card className="min-w-0">
             <CardHeader>
-                <CardTitle>Istoric ajustări</CardTitle>
+                <CardTitle>{t('Actual adjustment history')}</CardTitle>
                 <CardDescription>
-                    {adjustments.length} înregistrări append-only în perioada
-                    activă
+                    {t(':count append-only records in the active period', {
+                        count: adjustments.length,
+                    })}
                 </CardDescription>
             </CardHeader>
             <CardContent className="px-0">
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead>Data ajustării</TableHead>
-                            <TableHead>Persoană</TableHead>
-                            <TableHead>Proiect / activitate</TableHead>
-                            <TableHead className="text-right">Ore</TableHead>
-                            <TableHead>Motiv</TableHead>
-                            <TableHead>Autor</TableHead>
-                            <TableHead>Status</TableHead>
-                            {canReverse && <TableHead>Acțiune</TableHead>}
+                            <TableHead>{t('Adjustment date')}</TableHead>
+                            <TableHead>{t('Person')}</TableHead>
+                            <TableHead>{t('Project / activity')}</TableHead>
+                            <TableHead className="text-right">
+                                {t('Hours')}
+                            </TableHead>
+                            <TableHead>{t('Reason')}</TableHead>
+                            <TableHead>{t('Author')}</TableHead>
+                            <TableHead>{t('Status')}</TableHead>
+                            {canReverse && <TableHead>{t('Action')}</TableHead>}
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {adjustments.map((adjustment) => (
                             <TableRow key={adjustment.id}>
                                 <TableCell>
-                                    {formatDate(adjustment.effectiveDate)}
+                                    {formatDate(
+                                        adjustment.effectiveDate,
+                                        languageTag,
+                                    )}
                                 </TableCell>
                                 <TableCell>{adjustment.person}</TableCell>
                                 <TableCell>{adjustment.project}</TableCell>
                                 <TableCell className="text-right tabular-nums">
-                                    {formatHours(adjustment.hoursDelta)}
+                                    {formatHours(
+                                        adjustment.hoursDelta,
+                                        languageTag,
+                                    )}
                                 </TableCell>
                                 <TableCell>{adjustment.reason}</TableCell>
                                 <TableCell>{adjustment.author}</TableCell>
@@ -1086,10 +1151,10 @@ function AdjustmentHistory({
                                         }
                                     >
                                         {adjustment.isReversal
-                                            ? 'inversare'
+                                            ? t('reversal')
                                             : adjustment.isReversed
-                                              ? 'inversată'
-                                              : 'activă'}
+                                              ? t('reversed')
+                                              : t('active')}
                                     </Badge>
                                 </TableCell>
                                 {canReverse && (
@@ -1118,6 +1183,7 @@ export default function TeamLeadPlan({
     adjustments,
     permissions,
 }: Props) {
+    const { languageTag, t } = useTranslations();
     const pageUrl = usePage().url;
     const requestedPersonId = Number(
         new URLSearchParams(pageUrl.split('?')[1] ?? '').get('person'),
@@ -1156,15 +1222,15 @@ export default function TeamLeadPlan({
                     (left, right) =>
                         left.person.name.localeCompare(
                             right.person.name,
-                            'ro',
+                            languageTag,
                         ) ||
                         left.project.label.localeCompare(
                             right.project.label,
-                            'ro',
+                            languageTag,
                         ) ||
-                        left.role.localeCompare(right.role, 'ro'),
+                        left.role.localeCompare(right.role, languageTag),
                 ),
-        [filterByPersonAndProject, planRows, roleFilter],
+        [filterByPersonAndProject, languageTag, planRows, roleFilter],
     );
     const filteredComparisonRows = useMemo(
         () =>
@@ -1178,14 +1244,14 @@ export default function TeamLeadPlan({
                     (left, right) =>
                         left.person.name.localeCompare(
                             right.person.name,
-                            'ro',
+                            languageTag,
                         ) ||
                         left.project.label.localeCompare(
                             right.project.label,
-                            'ro',
+                            languageTag,
                         ),
                 ),
-        [comparisonRows, filterByPersonAndProject, roleFilter],
+        [comparisonRows, filterByPersonAndProject, languageTag, roleFilter],
     );
     const visibleRows =
         mode === 'plan'
@@ -1193,13 +1259,13 @@ export default function TeamLeadPlan({
             : filteredComparisonRows.length;
     const totalRows = mode === 'plan' ? planRows.length : comparisonRows.length;
     const personFilterLabel = allPeopleSelected
-        ? 'Toate persoanele'
+        ? t('All people')
         : selectedPersonIds.length === 0
-          ? 'Nicio persoană'
+          ? t('No people')
           : selectedPersonIds.length === 1
             ? (people.find((person) => person.id === selectedPersonIds[0])
-                  ?.name ?? '1 persoană')
-            : `${selectedPersonIds.length} persoane`;
+                  ?.name ?? t('1 person'))
+            : t(':count people', { count: selectedPersonIds.length });
     const resetFilters = () => {
         setAllPeopleSelected(true);
         setSelectedPersonIds(people.map((person) => person.id));
@@ -1207,22 +1273,26 @@ export default function TeamLeadPlan({
         setRoleFilter('all');
     };
 
+    setLayoutProps({
+        breadcrumbs: [{ title: t('Team planning'), href: teamLeadIndex() }],
+    });
+
     return (
         <>
-            <Head title="Planificare echipă" />
+            <Head title={t('Team planning')} />
             <div className="flex h-full flex-1 flex-col gap-4 overflow-x-hidden p-4">
                 <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
                     <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-2">
                             <UsersRound className="size-6" />
                             <h1 className="text-2xl font-semibold tracking-tight">
-                                Planificare echipă
+                                {t('Team planning')}
                             </h1>
                         </div>
                         <p className="max-w-3xl text-sm text-muted-foreground">
-                            Planul este editabil în ore, realizatul vine din
-                            ClickUp, iar corecțiile sunt ajustări separate și
-                            auditate.
+                            {t(
+                                'Actual hours come from ClickUp. Corrections are separate, audited adjustments, while planned hours remain editable for authorized users.',
+                            )}
                         </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -1232,14 +1302,14 @@ export default function TeamLeadPlan({
                                 onClick={() => setAdjustmentOpen(true)}
                             >
                                 <Plus data-icon="inline-start" />
-                                Adaugă ajustare
+                                {t('Add adjustment')}
                             </Button>
                         )}
                         <ToggleGroup
                             type="single"
                             value={mode}
                             variant="outline"
-                            aria-label="Mod afișare"
+                            aria-label={t('Display mode')}
                             onValueChange={(value) => {
                                 if (value) {
                                     setMode(value as DisplayMode);
@@ -1247,13 +1317,13 @@ export default function TeamLeadPlan({
                             }}
                         >
                             <ToggleGroupItem value="plan">
-                                Plan (ore)
+                                {t('Plan (hours)')}
                             </ToggleGroupItem>
                             <ToggleGroupItem value="actual">
-                                Realizat (ore)
+                                {t('Actual (hours)')}
                             </ToggleGroupItem>
                             <ToggleGroupItem value="comparison">
-                                Plan vs Realizat
+                                {t('Plan vs Actual')}
                             </ToggleGroupItem>
                         </ToggleGroup>
                     </div>
@@ -1265,26 +1335,29 @@ export default function TeamLeadPlan({
                             <div className="flex flex-col gap-1">
                                 <CardTitle>
                                     {mode === 'plan'
-                                        ? 'Plan lunar în ore'
+                                        ? t('Monthly plan in hours')
                                         : mode === 'actual'
-                                          ? 'Realizat lunar în ore'
-                                          : 'Plan vs Realizat'}
+                                          ? t('Monthly actual hours')
+                                          : t('Plan vs Actual')}
                                 </CardTitle>
                                 <CardDescription>
-                                    {visibleRows} din {totalRows} rânduri
+                                    {t(':count of :total rows', {
+                                        count: visibleRows,
+                                        total: totalRows,
+                                    })}
                                     {mode === 'plan' &&
                                         !permissions.manageAllocations &&
-                                        ' · acces doar pentru citire'}
+                                        ` · ${t('read-only access')}`}
                                     {mode !== 'plan' &&
                                         !permissions.adjustActualHours &&
-                                        ' · realizat doar pentru citire'}
+                                        ` · ${t('actual hours are read-only')}`}
                                 </CardDescription>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button
-                                            aria-label="Filtru persoane"
+                                            aria-label={t('People filter')}
                                             className="w-52 justify-between"
                                             variant="outline"
                                         >
@@ -1300,7 +1373,7 @@ export default function TeamLeadPlan({
                                     >
                                         <DropdownMenuGroup>
                                             <DropdownMenuLabel>
-                                                Persoane
+                                                {t('People')}
                                             </DropdownMenuLabel>
                                             <DropdownMenuCheckboxItem
                                                 checked={allPeopleSelected}
@@ -1322,7 +1395,7 @@ export default function TeamLeadPlan({
                                                     event.preventDefault()
                                                 }
                                             >
-                                                Toate persoanele
+                                                {t('All people')}
                                             </DropdownMenuCheckboxItem>
                                         </DropdownMenuGroup>
                                         <DropdownMenuSeparator />
@@ -1374,17 +1447,19 @@ export default function TeamLeadPlan({
                                 >
                                     <SelectTrigger
                                         className="w-64"
-                                        aria-label="Filtru proiect"
+                                        aria-label={t('Project filter')}
                                     >
-                                        <SelectValue placeholder="Toate proiectele" />
+                                        <SelectValue
+                                            placeholder={t('All projects')}
+                                        />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectGroup>
                                             <SelectItem value="all">
-                                                Toate proiectele
+                                                {t('All projects')}
                                             </SelectItem>
                                             <SelectItem value="internal">
-                                                Activități interne
+                                                {t('Internal activities')}
                                             </SelectItem>
                                             {projects.map((project) => (
                                                 <SelectItem
@@ -1393,7 +1468,7 @@ export default function TeamLeadPlan({
                                                 >
                                                     {project.label}
                                                     {project.active === false &&
-                                                        ' (inactiv)'}
+                                                        ` (${t('Inactive').toLocaleLowerCase(languageTag)})`}
                                                 </SelectItem>
                                             ))}
                                         </SelectGroup>
@@ -1405,14 +1480,16 @@ export default function TeamLeadPlan({
                                 >
                                     <SelectTrigger
                                         className="w-40"
-                                        aria-label="Filtru rol"
+                                        aria-label={t('Role filter')}
                                     >
-                                        <SelectValue placeholder="Toate rolurile" />
+                                        <SelectValue
+                                            placeholder={t('All roles')}
+                                        />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectGroup>
                                             <SelectItem value="all">
-                                                Toate rolurile
+                                                {t('All roles')}
                                             </SelectItem>
                                             {roles.map((role) => (
                                                 <SelectItem
@@ -1431,7 +1508,7 @@ export default function TeamLeadPlan({
                                     onClick={resetFilters}
                                 >
                                     <RotateCcw data-icon="inline-start" />
-                                    Resetează
+                                    {t('Reset')}
                                 </Button>
                             </div>
                         </div>
@@ -1479,12 +1556,3 @@ export default function TeamLeadPlan({
         </>
     );
 }
-
-TeamLeadPlan.layout = {
-    breadcrumbs: [
-        {
-            title: 'Planificare echipă',
-            href: teamLeadIndex(),
-        },
-    ],
-};

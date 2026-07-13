@@ -7,7 +7,7 @@ test('returns the HiveOps application shell', function () {
 
     $response
         ->assertOk()
-        ->assertSee('<title>BEE CODED HiveOps</title>', false)
+        ->assertSee('Capacity, allocation and delivery - BEE CODED HiveOps')
         ->assertSee('href="/favicon.svg"', false)
         ->assertDontSee('href="/favicon.ico"', false);
 });

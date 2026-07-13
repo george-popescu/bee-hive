@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\AllocationController;
 use App\Http\Controllers\ClickUpSyncController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\LocaleController;
 use App\Http\Controllers\ManagementController;
 use App\Http\Controllers\PmBoardController;
 use App\Http\Controllers\TeamLeadController;
@@ -18,6 +19,7 @@ use App\Http\Controllers\WeeklyPlanningController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
+Route::put('locale', LocaleController::class)->name('locale.update');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');

@@ -1,5 +1,5 @@
 // Components
-import { Form, Head } from '@inertiajs/react';
+import { Form, Head, setLayoutProps } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -7,13 +7,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { useTranslations } from '@/hooks/use-translations';
 import { login } from '@/routes';
 import { email } from '@/routes/password';
 
 export default function ForgotPassword({ status }: { status?: string }) {
+    const { t } = useTranslations();
+
+    setLayoutProps({
+        title: t('Forgot password?'),
+        description: t(
+            'Enter the email address for your internal account and we will send you a password reset link.',
+        ),
+    });
+
     return (
         <>
-            <Head title="Recuperare parolă" />
+            <Head title={t('Password recovery')} />
 
             {status && (
                 <Alert>
@@ -26,7 +36,9 @@ export default function ForgotPassword({ status }: { status?: string }) {
                     {({ processing, errors }) => (
                         <>
                             <div className="grid gap-2">
-                                <Label htmlFor="email">Adresă de email</Label>
+                                <Label htmlFor="email">
+                                    {t('Email address')}
+                                </Label>
                                 <Input
                                     id="email"
                                     type="email"
@@ -48,7 +60,7 @@ export default function ForgotPassword({ status }: { status?: string }) {
                                     {processing && (
                                         <Spinner data-icon="inline-start" />
                                     )}
-                                    Trimite linkul de resetare
+                                    {t('Reset password link')}
                                 </Button>
                             </div>
                         </>
@@ -56,16 +68,12 @@ export default function ForgotPassword({ status }: { status?: string }) {
                 </Form>
 
                 <div className="flex justify-center gap-1 text-center text-sm text-muted-foreground">
-                    <span>Înapoi la</span>
-                    <TextLink href={login()}>autentificare</TextLink>
+                    <span>{t('Back to')}</span>
+                    <TextLink href={login()}>
+                        {t('Log in').toLocaleLowerCase()}
+                    </TextLink>
                 </div>
             </div>
         </>
     );
 }
-
-ForgotPassword.layout = {
-    title: 'Ai uitat parola?',
-    description:
-        'Introdu adresa contului intern și îți trimitem un link de resetare.',
-};

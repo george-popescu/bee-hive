@@ -1,0 +1,62 @@
+<?php
+
+return [
+    'common' => [
+        'internal_activities' => 'Activități interne',
+        'internal_activity' => 'Activitate internă',
+        'no_status' => 'fără status',
+        'unknown' => 'Necunoscut',
+    ],
+    'dashboard' => [
+        'company_scope' => 'Toată compania',
+        'team_scope' => 'Echipa mea',
+        'projects_scope' => 'Proiectele mele',
+        'empty_scope' => 'Fără scope operațional',
+        'overallocated' => '{1} 1 persoană este supra-alocată|[2,*] :count persoane sunt supra-alocate',
+        'overallocated_detail' => 'Planificarea depășește 105% din capacitatea disponibilă.',
+        'underallocated' => '{1} 1 persoană are disponibilitate mare|[2,*] :count persoane au disponibilitate mare',
+        'underallocated_detail' => 'Planificarea este sub 70% din capacitatea disponibilă.',
+    ],
+    'data_quality' => [
+        'unmapped_people_title' => 'Pontaje fără persoană mapată',
+        'unmapped_people_detail' => 'Utilizatorul ClickUp nu este asociat unei persoane locale.',
+        'unmapped_projects_title' => 'Pontaje fără proiect mapat',
+        'unmapped_projects_detail' => 'Locația ClickUp nu este asociată unui proiect sau activităților interne.',
+        'missing_tasks_title' => 'Pontaje fără task local',
+        'missing_tasks_detail' => 'Taskul ClickUp nu a fost găsit în snapshotul local.',
+        'inactive_people_title' => 'Pontaje pe persoane inactive',
+        'inactive_people_detail' => 'Există activitate în perioadă pentru persoane marcate inactive.',
+        'unmapped_locations_title' => '{1} 1 folder ClickUp nemapat|[2,*] :count foldere ClickUp nemapate',
+        'unmapped_locations_detail' => 'Folderul trebuie asociat unui proiect sau marcat drept intern.',
+    ],
+    'pm_board' => [
+        'deliverables_template' => 'Livrabile / Fixed',
+        'planning_conflict' => 'Planificarea a fost modificată de alt utilizator. Reîncarcă pagina.',
+        'week_must_start_on_monday' => 'Săptămâna trebuie să înceapă luni.',
+    ],
+    'adjustments' => [
+        'created' => 'Ajustarea a fost înregistrată.',
+        'reversed' => 'Ajustarea a fost inversată.',
+        'already_reversed' => 'Ajustarea a fost deja inversată.',
+        'reversal_cannot_be_reversed' => 'O inversare nu poate fi inversată din nou.',
+        'internal_label_required' => 'Eticheta activității interne este obligatorie.',
+        'invalid_date' => 'Data ajustării trebuie să fie validă.',
+        'non_zero_hours' => 'Ajustarea trebuie să modifice numărul de ore.',
+        'date_outside_active_period' => 'Data trebuie să fie în perioada activă de planificare.',
+    ],
+    'clickup_sync' => [
+        'queued' => 'Sincronizarea ClickUp a fost pusă în coadă.',
+    ],
+    'admin' => [
+        'admin_role_must_keep_critical_permissions' => 'Rolul Admin trebuie să păstreze permisiunile critice de administrare.',
+        'last_admin_cannot_lose_role' => 'Ultimul administrator nu poate pierde rolul Admin.',
+        'last_admin_cannot_delete_account' => 'Ultimul administrator nu își poate șterge contul.',
+        'only_role_managers_can_assign_admin_roles' => 'Doar utilizatorii care administrează rolurile și permisiunile pot atribui roluri administrative.',
+        'only_role_managers_can_remove_admin_role' => 'Doar utilizatorii care administrează rolurile și permisiunile pot elimina rolul Admin.',
+        'person_updated' => 'Configurația persoanei a fost actualizată.',
+        'project_updated' => 'Configurația proiectului a fost actualizată.',
+        'role_permissions_updated' => 'Permisiunile rolului au fost actualizate.',
+        'settings_updated' => 'Setările generale au fost actualizate.',
+        'user_roles_updated' => 'Rolurile utilizatorului au fost actualizate.',
+    ],
+];

@@ -142,7 +142,7 @@ it('builds weekly worked and upcoming metrics from period and lifetime hours', f
             ->component('pm-board/index', false)
             ->where('period.start', '2026-07-06')
             ->where('period.end', '2026-07-12')
-            ->where('period.label', '6 iul – 12 iul 2026')
+            ->where('period.label', '6 jul – 12 jul 2026')
             ->where('period.previousAnchor', '2026-07-01')
             ->where('period.nextAnchor', '2026-07-15')
             ->has('workedTasks', 1)
@@ -200,13 +200,13 @@ it('uses calendar month boundaries and month navigation', function () {
             ->where('period.type', 'month')
             ->where('period.start', '2026-07-01')
             ->where('period.end', '2026-07-31')
-            ->where('period.label', 'Iulie 2026')
+            ->where('period.label', 'July 2026')
             ->where('period.previousAnchor', '2026-06-15')
             ->where('period.nextAnchor', '2026-08-15')
             ->where('workedTasks.0.periodHours', 2)
             ->has('summaryCharts.timeline', 5)
-            ->where('summaryCharts.timeline.0.label', '1 iul–5 iul')
-            ->where('summaryCharts.timeline.4.label', '27 iul–31 iul')
+            ->where('summaryCharts.timeline.0.label', '1 jul–5 jul')
+            ->where('summaryCharts.timeline.4.label', '27 jul–31 jul')
             ->where('summaryCharts.timeline.4.hours', 2));
 });
 
@@ -336,7 +336,7 @@ it('aggregates every visible project when no individual project is selected', fu
                 ['label' => 'Acme — Portal', 'hours' => 2],
             ])
             ->has('summaryCharts.timeline', 7)
-            ->where('summaryCharts.timeline.2.label', 'Mie 8')
+            ->where('summaryCharts.timeline.2.label', 'Wed 8')
             ->where('summaryCharts.timeline.2.hours', 5)
             ->where('summaryCharts.timeline.2.projects', [
                 ['label' => 'Beta — Mobile', 'hours' => 3],
@@ -441,7 +441,7 @@ it('shows ClickUp calls and overhead as selectable internal activity', function 
             ->where('internalOption.periodHours', 4)
             ->has('workedTasks', 1)
             ->where('workedTasks.0.name', 'Calls interne')
-            ->where('workedTasks.0.projectLabel', 'Activități interne')
+            ->where('workedTasks.0.projectLabel', 'Internal activities')
             ->where('kpis.actualHours', 4));
 
     $this->actingAs($user)

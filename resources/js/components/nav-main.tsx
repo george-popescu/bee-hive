@@ -7,20 +7,22 @@ import {
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { useCurrentUrl } from '@/hooks/use-current-url';
+import { useTranslations } from '@/hooks/use-translations';
 import type { NavItem } from '@/types';
 
 export function NavMain({
     items = [],
-    label = 'Spațiu de lucru',
+    label,
 }: {
     items: NavItem[];
     label?: string;
 }) {
     const { isCurrentUrl } = useCurrentUrl();
+    const { t } = useTranslations();
 
     return (
         <SidebarGroup className="px-2 py-0">
-            <SidebarGroupLabel>{label}</SidebarGroupLabel>
+            <SidebarGroupLabel>{label ?? t('Workspace')}</SidebarGroupLabel>
             <SidebarMenu>
                 {items.map((item) => (
                     <SidebarMenuItem key={item.title}>

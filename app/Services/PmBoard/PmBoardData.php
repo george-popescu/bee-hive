@@ -77,7 +77,7 @@ class PmBoardData
         $internalListIds = $this->internalListIds();
         $internalPeriodSeconds = $this->internalPeriodSeconds($internalListIds, $rangeStart, $rangeEnd);
         $internalOption = [
-            'label' => 'Activități interne',
+            'label' => __('messages.common.internal_activities'),
             'periodHours' => round($internalPeriodSeconds / 3600, 2),
             'available' => $internalListIds->isNotEmpty(),
         ];
@@ -269,7 +269,7 @@ class PmBoardData
                 $entry = $entries->first();
 
                 return [
-                    'name' => $entry instanceof TimeEntry ? $this->entryPersonName($entry) : 'Necunoscut',
+                    'name' => $entry instanceof TimeEntry ? $this->entryPersonName($entry) : __('messages.common.unknown'),
                     'hours' => round(((int) $entries->sum('duration_seconds')) / 3600, 2),
                 ];
             })
@@ -290,9 +290,9 @@ class PmBoardData
             'id' => $task->getKey(),
             'clickupId' => $task->clickup_task_id,
             'name' => $task->name,
-            'projectLabel' => $task->project instanceof Project ? $this->projectLabel($task->project) : 'Activități interne',
+            'projectLabel' => $task->project instanceof Project ? $this->projectLabel($task->project) : __('messages.common.internal_activities'),
             'url' => "https://app.clickup.com/t/{$task->clickup_task_id}",
-            'status' => $status === '' ? 'fără status' : $status,
+            'status' => $status === '' ? __('messages.common.no_status') : $status,
             'statusGroup' => $statusGroup,
             'isDone' => $isDone,
             'active' => $task->active,
@@ -321,7 +321,7 @@ class PmBoardData
                 $entry = $entries->first();
 
                 return [
-                    'name' => $entry instanceof TimeEntry ? $this->entryPersonName($entry) : 'Necunoscut',
+                    'name' => $entry instanceof TimeEntry ? $this->entryPersonName($entry) : __('messages.common.unknown'),
                     'hours' => round(((int) $entries->sum('duration_seconds')) / 3600, 2),
                     'tasks' => $entries->pluck('click_up_task_id')->filter()->unique()->count(),
                 ];
@@ -350,7 +350,7 @@ class PmBoardData
         $projectLabelsByTask = $tasks->mapWithKeys(fn (ClickUpTask $task): array => [
             $task->getKey() => $task->project instanceof Project
                 ? $this->projectLabel($task->project)
-                : 'Activități interne',
+                : __('messages.common.internal_activities'),
         ]);
         $projectRows = $this->chartHoursRows($periodEntries, $projectLabelsByTask);
         $people = array_values($periodEntries
@@ -360,7 +360,7 @@ class PmBoardData
 
                 return [
                     'key' => $key,
-                    'name' => $entry instanceof TimeEntry ? $this->entryPersonName($entry) : 'Necunoscut',
+                    'name' => $entry instanceof TimeEntry ? $this->entryPersonName($entry) : __('messages.common.unknown'),
                     'hours' => round(((int) $entries->sum('duration_seconds')) / 3600, 2),
                     'tasks' => $entries->pluck('click_up_task_id')->filter()->unique()->count(),
                     'projects' => $this->chartHoursRows($entries, $projectLabelsByTask),
@@ -401,10 +401,15 @@ class PmBoardData
      */
     private function chartHoursRows(Collection $entries, Collection $projectLabelsByTask): array
     {
+        $internalActivities = __('messages.common.internal_activities');
+        $internalActivities = is_string($internalActivities)
+            ? $internalActivities
+            : 'Internal activities';
+
         return array_values($entries
-            ->groupBy(fn (TimeEntry $entry): string => (string) $projectLabelsByTask->get(
+            ->groupBy(fn (TimeEntry $entry): string => $projectLabelsByTask->get(
                 $entry->click_up_task_id,
-                'Activități interne',
+                $internalActivities,
             ))
             ->map(fn (Collection $projectEntries, string $label): array => [
                 'label' => $label,
@@ -453,7 +458,7 @@ class PmBoardData
     private function entryPersonName(TimeEntry $entry): string
     {
         if ($entry->person_id === null) {
-            return $entry->person_name ?? 'Necunoscut';
+            return $entry->person_name ?? __('messages.common.unknown');
         }
 
         return $entry->person->name;
@@ -610,7 +615,7 @@ class PmBoardData
                     'id' => $task->getKey(),
                     'name' => $task->name,
                     'url' => "https://app.clickup.com/t/{$task->clickup_task_id}",
-                    'status' => trim((string) $task->status) ?: 'fără status',
+                    'status' => trim((string) $task->status) ?: __('messages.common.no_status'),
                     'owners' => $task->assignees->pluck('name')->values()->all(),
                     'estimateHours' => $row['estimateHours'] ?? null,
                     'progress' => $row['progress'] ?? null,
@@ -770,37 +775,16 @@ class PmBoardData
 
     private function shortDate(CarbonImmutable $date): string
     {
-        return $date->day.' '.mb_strtolower(mb_substr($this->monthName($date), 0, 3));
+        return $date->day.' '.__('dates.months_short_lower.'.$date->month);
     }
 
     private function shortWeekday(CarbonImmutable $date): string
     {
-        return [
-            1 => 'Lun',
-            2 => 'Mar',
-            3 => 'Mie',
-            4 => 'Joi',
-            5 => 'Vin',
-            6 => 'Sâm',
-            7 => 'Dum',
-        ][$date->dayOfWeekIso];
+        return __('dates.weekdays_short.'.$date->dayOfWeekIso);
     }
 
     private function monthName(CarbonImmutable $date): string
     {
-        return [
-            1 => 'Ianuarie',
-            2 => 'Februarie',
-            3 => 'Martie',
-            4 => 'Aprilie',
-            5 => 'Mai',
-            6 => 'Iunie',
-            7 => 'Iulie',
-            8 => 'August',
-            9 => 'Septembrie',
-            10 => 'Octombrie',
-            11 => 'Noiembrie',
-            12 => 'Decembrie',
-        ][$date->month];
+        return __('dates.months.'.$date->month);
     }
 }

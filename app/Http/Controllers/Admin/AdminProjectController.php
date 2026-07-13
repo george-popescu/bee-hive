@@ -38,7 +38,7 @@ class AdminProjectController extends Controller
             return response()->json(['updated' => true]);
         }
 
-        return back(status: 303)->with('success', 'Configurația proiectului a fost actualizată.');
+        return back(status: 303)->with('success', __('messages.admin.project_updated'));
     }
 
     /** @return array<string, mixed> */

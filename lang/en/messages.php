@@ -1,0 +1,62 @@
+<?php
+
+return [
+    'common' => [
+        'internal_activities' => 'Internal activities',
+        'internal_activity' => 'Internal activity',
+        'no_status' => 'no status',
+        'unknown' => 'Unknown',
+    ],
+    'dashboard' => [
+        'company_scope' => 'Entire company',
+        'team_scope' => 'My team',
+        'projects_scope' => 'My projects',
+        'empty_scope' => 'No operational scope',
+        'overallocated' => '{1} 1 person is overallocated|[2,*] :count people are overallocated',
+        'overallocated_detail' => 'Planning exceeds 105% of available capacity.',
+        'underallocated' => '{1} 1 person has high availability|[2,*] :count people have high availability',
+        'underallocated_detail' => 'Planning is below 70% of available capacity.',
+    ],
+    'data_quality' => [
+        'unmapped_people_title' => 'Time entries without a mapped person',
+        'unmapped_people_detail' => 'The ClickUp user is not associated with a local person.',
+        'unmapped_projects_title' => 'Time entries without a mapped project',
+        'unmapped_projects_detail' => 'The ClickUp location is not associated with a project or internal activities.',
+        'missing_tasks_title' => 'Time entries without a local task',
+        'missing_tasks_detail' => 'The ClickUp task was not found in the local snapshot.',
+        'inactive_people_title' => 'Time entries for inactive people',
+        'inactive_people_detail' => 'The selected period contains activity for people marked inactive.',
+        'unmapped_locations_title' => '{1} 1 unmapped ClickUp folder|[2,*] :count unmapped ClickUp folders',
+        'unmapped_locations_detail' => 'The folder must be associated with a project or marked as internal.',
+    ],
+    'pm_board' => [
+        'deliverables_template' => 'Deliverables / Fixed',
+        'planning_conflict' => 'The planning was changed by another user. Reload the page.',
+        'week_must_start_on_monday' => 'The week must start on Monday.',
+    ],
+    'adjustments' => [
+        'created' => 'The adjustment was recorded.',
+        'reversed' => 'The adjustment was reversed.',
+        'already_reversed' => 'The adjustment has already been reversed.',
+        'reversal_cannot_be_reversed' => 'A reversal cannot be reversed again.',
+        'internal_label_required' => 'The internal activity label is required.',
+        'invalid_date' => 'The adjustment date must be valid.',
+        'non_zero_hours' => 'The adjustment must change the number of hours.',
+        'date_outside_active_period' => 'The date must be within the active planning period.',
+    ],
+    'clickup_sync' => [
+        'queued' => 'The ClickUp sync was queued.',
+    ],
+    'admin' => [
+        'admin_role_must_keep_critical_permissions' => 'The Admin role must retain the critical administration permissions.',
+        'last_admin_cannot_lose_role' => 'The last administrator cannot lose the Admin role.',
+        'last_admin_cannot_delete_account' => 'The last administrator cannot delete their account.',
+        'only_role_managers_can_assign_admin_roles' => 'Only users who manage roles and permissions can assign administrative roles.',
+        'only_role_managers_can_remove_admin_role' => 'Only users who manage roles and permissions can remove the Admin role.',
+        'person_updated' => 'The person configuration was updated.',
+        'project_updated' => 'The project configuration was updated.',
+        'role_permissions_updated' => 'The role permissions were updated.',
+        'settings_updated' => 'The general settings were updated.',
+        'user_roles_updated' => 'The user roles were updated.',
+    ],
+];

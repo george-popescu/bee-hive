@@ -1,4 +1,4 @@
-import { Head, usePage } from '@inertiajs/react';
+import { Head, setLayoutProps, usePage } from '@inertiajs/react';
 import { CalendarOff, ChartNoAxesCombined, RotateCcw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +27,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { useTranslations } from '@/hooks/use-translations';
 import { index as managementIndex } from '@/routes/management';
 
 type UtilizationStatus =
@@ -66,16 +67,16 @@ type Props = {
 };
 type VisibleRange = '3' | '6' | 'all';
 
-function formatHours(value: number | null): string {
+function formatHours(value: number | null, locale: string): string {
     if (value === null) {
         return '—';
     }
 
-    return value.toLocaleString('ro-RO', { maximumFractionDigits: 1 });
+    return value.toLocaleString(locale, { maximumFractionDigits: 1 });
 }
 
-function formatPercent(value: number): string {
-    return `${value.toLocaleString('ro-RO', { maximumFractionDigits: 1 })}%`;
+function formatPercent(value: number, locale: string): string {
+    return `${value.toLocaleString(locale, { maximumFractionDigits: 1 })}%`;
 }
 
 function badgeVariant(status: UtilizationStatus) {
@@ -111,11 +112,13 @@ function Metric({
     actual: boolean;
     showHours?: boolean;
 }) {
+    const { languageTag, t } = useTranslations();
+
     if (external) {
         return (
             <span className="text-sm text-muted-foreground tabular-nums">
                 {actual && hours !== null
-                    ? `${formatHours(hours)}h`
+                    ? `${formatHours(hours, languageTag)}h`
                     : actual
                       ? '—'
                       : '·'}
@@ -124,7 +127,7 @@ function Metric({
     }
 
     if (fullyOnLeave) {
-        return <Badge variant="outline">concediu</Badge>;
+        return <Badge variant="outline">{t('on leave')}</Badge>;
     }
 
     if (actual && hours === null && showHours) {
@@ -138,11 +141,11 @@ function Metric({
     return (
         <span className="flex items-center justify-end gap-2">
             <Badge variant={badgeVariant(status)}>
-                {formatPercent(percent)}
+                {formatPercent(percent, languageTag)}
             </Badge>
             {showHours && hours !== null && (
                 <span className="text-xs text-muted-foreground tabular-nums">
-                    {formatHours(hours)}h
+                    {formatHours(hours, languageTag)}h
                 </span>
             )}
         </span>
@@ -190,6 +193,7 @@ export default function ManagementUtilization({
     projects,
     rows,
 }: Props) {
+    const { languageTag, t } = useTranslations();
     const pageUrl = usePage().url;
     const requestedPersonId = new URLSearchParams(
         pageUrl.split('?')[1] ?? '',
@@ -245,9 +249,12 @@ export default function ManagementUtilization({
                     (left, right) =>
                         Number(left.person.isExternal) -
                             Number(right.person.isExternal) ||
-                        left.person.name.localeCompare(right.person.name, 'ro'),
+                        left.person.name.localeCompare(
+                            right.person.name,
+                            languageTag,
+                        ),
                 ),
-        [personFilter, projectFilter, roleFilter, rows],
+        [languageTag, personFilter, projectFilter, roleFilter, rows],
     );
     const resetFilters = () => {
         setPersonFilter('all');
@@ -255,28 +262,33 @@ export default function ManagementUtilization({
         setProjectFilter('all');
     };
 
+    setLayoutProps({
+        breadcrumbs: [
+            { title: t('Team utilization'), href: managementIndex() },
+        ],
+    });
+
     return (
         <>
-            <Head title="Utilizare echipă" />
+            <Head title={t('Team utilization')} />
             <div className="flex h-full flex-1 flex-col gap-4 overflow-x-hidden p-4">
                 <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
                     <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-2">
                             <ChartNoAxesCombined className="size-6" />
                             <h1 className="text-2xl font-semibold tracking-tight">
-                                Utilizare echipă — Estimat vs Realizat
+                                {t('Team utilization — Estimated vs Actual')}
                             </h1>
                         </div>
                         <p className="max-w-4xl text-sm text-muted-foreground">
-                            Est. arată planul raportat la capacitatea
-                            disponibilă după concediu. Real. include pontajele
-                            ClickUp și ajustările auditate; „—” înseamnă că luna
-                            nu are raportare.
+                            {t(
+                                'Estimated values compare the plan against available capacity after leave. Actual values include ClickUp time entries and audited adjustments; “—” means the month has no reporting.',
+                            )}
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground">
-                            Luni afișate
+                            {t('Months shown')}
                         </span>
                         <ToggleGroup
                             type="single"
@@ -290,19 +302,21 @@ export default function ManagementUtilization({
                         >
                             <ToggleGroupItem value="3">3</ToggleGroupItem>
                             <ToggleGroupItem value="6">6</ToggleGroupItem>
-                            <ToggleGroupItem value="all">Toate</ToggleGroupItem>
+                            <ToggleGroupItem value="all">
+                                {t('All')}
+                            </ToggleGroupItem>
                         </ToggleGroup>
                     </div>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm text-muted-foreground">
-                        Legendă:
+                        {t('Legend:')}
                     </span>
-                    <Badge variant="success">sub 90%</Badge>
+                    <Badge variant="success">{t('under 90%')}</Badge>
                     <Badge variant="warning">90–105%</Badge>
                     <Badge variant="destructive">
-                        peste 105% — supra-încărcat
+                        {t('over 105% — overloaded')}
                     </Badge>
                     <Badge variant="secondary">0%</Badge>
                 </div>
@@ -312,11 +326,17 @@ export default function ManagementUtilization({
                         <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
                             <div className="flex flex-col gap-1">
                                 <CardTitle>
-                                    Capacitate și utilizare lunară
+                                    {t('Monthly capacity and utilization')}
                                 </CardTitle>
                                 <CardDescription>
-                                    {filteredRows.length} din {rows.length}{' '}
-                                    persoane · {visibleMonths.length} luni
+                                    {t(
+                                        ':filtered of :total people · :months months',
+                                        {
+                                            filtered: filteredRows.length,
+                                            total: rows.length,
+                                            months: visibleMonths.length,
+                                        },
+                                    )}
                                 </CardDescription>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">
@@ -326,14 +346,16 @@ export default function ManagementUtilization({
                                 >
                                     <SelectTrigger
                                         className="w-48"
-                                        aria-label="Filtru persoană"
+                                        aria-label={t('Person filter')}
                                     >
-                                        <SelectValue placeholder="Toate persoanele" />
+                                        <SelectValue
+                                            placeholder={t('All people')}
+                                        />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectGroup>
                                             <SelectItem value="all">
-                                                Toate persoanele
+                                                {t('All people')}
                                             </SelectItem>
                                             {people.map((person) => (
                                                 <SelectItem
@@ -352,14 +374,16 @@ export default function ManagementUtilization({
                                 >
                                     <SelectTrigger
                                         className="w-44"
-                                        aria-label="Filtru rol"
+                                        aria-label={t('Role filter')}
                                     >
-                                        <SelectValue placeholder="Toate rolurile" />
+                                        <SelectValue
+                                            placeholder={t('All roles')}
+                                        />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectGroup>
                                             <SelectItem value="all">
-                                                Toate rolurile
+                                                {t('All roles')}
                                             </SelectItem>
                                             {roles.map((role) => (
                                                 <SelectItem
@@ -378,17 +402,19 @@ export default function ManagementUtilization({
                                 >
                                     <SelectTrigger
                                         className="w-64"
-                                        aria-label="Filtru proiect"
+                                        aria-label={t('Project filter')}
                                     >
-                                        <SelectValue placeholder="Toate proiectele" />
+                                        <SelectValue
+                                            placeholder={t('All projects')}
+                                        />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectGroup>
                                             <SelectItem value="all">
-                                                Toate proiectele
+                                                {t('All projects')}
                                             </SelectItem>
                                             <SelectItem value="internal">
-                                                Activități interne
+                                                {t('Internal activities')}
                                             </SelectItem>
                                             {projects.map((project) => (
                                                 <SelectItem
@@ -407,7 +433,7 @@ export default function ManagementUtilization({
                                     onClick={resetFilters}
                                 >
                                     <RotateCcw data-icon="inline-start" />
-                                    Resetează
+                                    {t('Reset')}
                                 </Button>
                             </div>
                         </div>
@@ -420,13 +446,13 @@ export default function ManagementUtilization({
                                         rowSpan={2}
                                         className="sticky top-0 left-0 min-w-48 bg-card"
                                     >
-                                        Persoană
+                                        {t('Person')}
                                     </TableHead>
                                     <TableHead
                                         rowSpan={2}
                                         className="sticky top-0 min-w-32 bg-card"
                                     >
-                                        Rol
+                                        {t('Role')}
                                     </TableHead>
                                     {visibleMonths.map((month) => (
                                         <TableHead
@@ -441,7 +467,7 @@ export default function ManagementUtilization({
                                         colSpan={2}
                                         className="sticky top-0 min-w-48 bg-card text-center"
                                     >
-                                        Medie
+                                        {t('Average')}
                                     </TableHead>
                                 </TableRow>
                                 <TableRow>
@@ -450,20 +476,20 @@ export default function ManagementUtilization({
                                             key={`${month.key}-estimated`}
                                             className="sticky top-10 min-w-28 bg-card text-right"
                                         >
-                                            Est.
+                                            {t('Est.')}
                                         </TableHead>,
                                         <TableHead
                                             key={`${month.key}-actual`}
                                             className="sticky top-10 min-w-28 bg-card text-right"
                                         >
-                                            Real.
+                                            {t('Act.')}
                                         </TableHead>,
                                     ])}
                                     <TableHead className="sticky top-10 min-w-24 bg-card text-right">
-                                        Est.
+                                        {t('Est.')}
                                     </TableHead>
                                     <TableHead className="sticky top-10 min-w-24 bg-card text-right">
-                                        Real.
+                                        {t('Act.')}
                                     </TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -487,7 +513,7 @@ export default function ManagementUtilization({
                                                     {row.person.name}
                                                     {row.person.isExternal && (
                                                         <Badge variant="secondary">
-                                                            extern
+                                                            {t('external')}
                                                         </Badge>
                                                     )}
                                                 </span>
@@ -502,7 +528,9 @@ export default function ManagementUtilization({
                                                     value.leaveDays > 0 && (
                                                         <Badge variant="outline">
                                                             <CalendarOff />
-                                                            {value.leaveDays}z
+                                                            {t(':count days', {
+                                                                count: value.leaveDays,
+                                                            })}
                                                         </Badge>
                                                     );
 
@@ -601,12 +629,3 @@ export default function ManagementUtilization({
         </>
     );
 }
-
-ManagementUtilization.layout = {
-    breadcrumbs: [
-        {
-            title: 'Utilizare echipă',
-            href: managementIndex(),
-        },
-    ],
-};
