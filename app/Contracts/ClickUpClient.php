@@ -19,6 +19,8 @@ interface ClickUpClient
     public function tasks(?CarbonInterface $updatedAfter = null): iterable;
 
     /**
+     * An empty assignee list requests entries for the authenticated ClickUp user only.
+     *
      * @param  list<string>  $assigneeIds
      * @return list<array<string, mixed>>
      */

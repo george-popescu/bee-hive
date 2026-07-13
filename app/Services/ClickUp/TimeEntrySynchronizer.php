@@ -10,6 +10,7 @@ use App\Models\TimeEntry;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 final class TimeEntrySynchronizer
 {
@@ -17,7 +18,20 @@ final class TimeEntrySynchronizer
 
     public function sync(CarbonInterface $from, CarbonInterface $to): int
     {
-        $people = Person::query()->whereNotNull('clickup_user_id')->get()->keyBy('clickup_user_id');
+        $people = Person::query()
+            ->whereNotNull('clickup_user_id')
+            ->orderBy('id')
+            ->get()
+            ->keyBy('clickup_user_id');
+        $assigneeIds = array_values($people->keys()
+            ->map(fn (mixed $id): ?string => ClickUpValue::stringId($id))
+            ->filter()
+            ->all());
+
+        if ($assigneeIds === []) {
+            throw new RuntimeException('No ClickUp member IDs are available for the time-entry snapshot.');
+        }
+
         $tasks = ClickUpTask::query()->with('clickUpList.folder')->get()->keyBy('clickup_task_id');
         $lists = ClickUpList::query()->with('folder')->get()->keyBy('clickup_list_id');
         $entries = [];
@@ -28,7 +42,7 @@ final class TimeEntrySynchronizer
             $windowEnd = $cursor->endOfMonth()->min($rangeEnd);
             $entries = [
                 ...$entries,
-                ...$this->client->timeEntries($cursor, $windowEnd, []),
+                ...$this->client->timeEntries($cursor, $windowEnd, $assigneeIds),
             ];
             $cursor = $windowEnd->addMillisecond();
         }

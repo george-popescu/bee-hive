@@ -152,7 +152,7 @@ it('sends the expected query when requesting time entries', function () {
         ]);
 });
 
-it('requests all workspace time entries when no assignee filter is supplied', function () {
+it('omits the assignee filter when the caller requests the authenticated user only', function () {
     Http::fake([
         'clickup.test/*' => Http::response(['data' => []]),
     ]);

@@ -14,6 +14,7 @@ use App\Models\SyncRun;
 use App\Models\TimeEntry;
 use App\Models\TimeOff;
 use App\Services\ClickUp\ClickUpSyncService;
+use App\Services\ClickUp\TimeEntrySynchronizer;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 
@@ -95,10 +96,6 @@ function clickUpClientFake(
                 return [];
             }
 
-            if ($this->externalTimeEntry && $assigneeIds !== []) {
-                return [];
-            }
-
             return [[
                 'id' => 'entry-1',
                 'task' => ['id' => 'task-1', 'name' => 'Build dashboard'],
@@ -140,6 +137,41 @@ function clickUpClientFake(
 beforeEach(function () {
     config()->set('services.clickup.projects_space_id', 'space-projects');
     config()->set('services.clickup.internal_folder_ids', ['folder-internal']);
+});
+
+it('requests time entries for every mapped ClickUp member', function () {
+    Person::factory()->create(['clickup_user_id' => '101']);
+    Person::factory()->create(['clickup_user_id' => '202']);
+    $client = Mockery::mock(ClickUpClient::class);
+    $client->shouldReceive('timeEntries')
+        ->once()
+        ->withArgs(fn (CarbonInterface $from, CarbonInterface $to, array $assigneeIds): bool => $assigneeIds === ['101', '202'])
+        ->andReturn([]);
+
+    (new TimeEntrySynchronizer($client))->sync(
+        CarbonImmutable::parse('2026-07-01T00:00:00Z'),
+        CarbonImmutable::parse('2026-07-31T23:59:59Z'),
+    );
+});
+
+it('refuses a destructive time-entry snapshot without mapped ClickUp members', function () {
+    $entry = TimeEntry::factory()->create([
+        'person_id' => null,
+        'started_at' => '2026-07-15 10:00:00',
+    ]);
+    $client = Mockery::mock(ClickUpClient::class);
+    $client->shouldNotReceive('timeEntries');
+    $synchronizer = new TimeEntrySynchronizer($client);
+
+    expect(fn () => $synchronizer->sync(
+        CarbonImmutable::parse('2026-07-01')->startOfDay(),
+        CarbonImmutable::parse('2026-07-31')->endOfDay(),
+    ))->toThrow(
+        RuntimeException::class,
+        'No ClickUp member IDs are available',
+    );
+
+    expect($entry->fresh())->not->toBeNull();
 });
 
 it('rejects synchronization intervals too large for a single protected run', function () {
