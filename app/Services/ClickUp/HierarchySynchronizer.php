@@ -85,12 +85,9 @@ final class HierarchySynchronizer
 
         $folder = ClickUpFolder::query()->firstOrNew(['clickup_folder_id' => $id]);
         $isInternal = in_array($id, $this->internalFolderIds, true);
-        $explicitProject = $projects->first(
-            fn (Project $project): bool => ClickUpValue::stringId($project->clickup_folder_id) === $id,
-        );
         $projectId = $isInternal
             ? null
-            : ($explicitProject?->getKey() ?? $folder->project_id);
+            : $this->resolveProject($id, $name, $folder, $projects)?->getKey();
 
         $folder->fill([
             'clickup_space_id' => $this->projectsSpaceId,
@@ -130,6 +127,104 @@ final class HierarchySynchronizer
         ])->save();
 
         return $list;
+    }
+
+    /** @param Collection<int, Project> $projects */
+    private function resolveProject(
+        string $folderId,
+        string $folderName,
+        ClickUpFolder $folder,
+        Collection $projects,
+    ): ?Project {
+        $explicitProject = $projects->first(
+            fn (Project $project): bool => ClickUpValue::stringId($project->clickup_folder_id) === $folderId,
+        );
+
+        if ($explicitProject instanceof Project) {
+            return $explicitProject;
+        }
+
+        $existingProject = $folder->project_id === null
+            ? null
+            : $projects->firstWhere('id', $folder->project_id);
+
+        if ($existingProject instanceof Project) {
+            return $existingProject;
+        }
+
+        $folderAlias = ClickUpValue::normalizedName($folderName);
+        $aliasMatches = $projects->filter(
+            fn (Project $project): bool => $this->mayClaimFolder($project, $folderId)
+                && ClickUpValue::normalizedName($project->folder_name) === $folderAlias,
+        );
+
+        if ($aliasMatches->count() === 1) {
+            return $this->claimFolder($aliasMatches->first(), $folderId, $folderName);
+        }
+
+        $labels = $this->structuredLabels($folderName);
+
+        if ($labels === null) {
+            return null;
+        }
+
+        [$client, $name] = $labels;
+        $clientName = ClickUpValue::normalizedName($client);
+        $projectName = ClickUpValue::normalizedName($name);
+        $exactMatches = $projects->filter(
+            fn (Project $project): bool => $this->mayClaimFolder($project, $folderId)
+                && ClickUpValue::normalizedName($project->client) === $clientName
+                && ClickUpValue::normalizedName($project->name) === $projectName,
+        );
+
+        if ($exactMatches->count() === 1) {
+            return $this->claimFolder($exactMatches->first(), $folderId, $folderName);
+        }
+
+        if ($exactMatches->isNotEmpty()) {
+            return null;
+        }
+
+        $project = Project::query()->create([
+            'clickup_space_id' => $this->projectsSpaceId,
+            'clickup_folder_id' => $folderId,
+            'client' => $client,
+            'name' => $name,
+            'folder_name' => $folderName,
+            'board_visible' => true,
+            'active' => true,
+        ]);
+        $projects->push($project);
+
+        return $project;
+    }
+
+    private function mayClaimFolder(Project $project, string $folderId): bool
+    {
+        $claimedFolderId = ClickUpValue::stringId($project->clickup_folder_id);
+
+        return $claimedFolderId === null || $claimedFolderId === $folderId;
+    }
+
+    private function claimFolder(Project $project, string $folderId, string $folderName): Project
+    {
+        $project->update([
+            'clickup_space_id' => $this->projectsSpaceId,
+            'clickup_folder_id' => $folderId,
+            'folder_name' => $folderName,
+        ]);
+
+        return $project;
+    }
+
+    /** @return array{0: string, 1: string}|null */
+    private function structuredLabels(string $folderName): ?array
+    {
+        preg_match_all('/\[([^]]+)]/', $folderName, $matches);
+        $client = is_string($matches[1][0] ?? null) ? trim($matches[1][0]) : '';
+        $project = is_string($matches[1][1] ?? null) ? trim($matches[1][1]) : '';
+
+        return $client === '' || $project === '' ? null : [$client, $project];
     }
 
     /**

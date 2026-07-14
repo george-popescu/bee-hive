@@ -257,8 +257,8 @@ it('reconciles removed ClickUp actuals while preserving manual time off', functi
         ->and($manualTimeOff->refresh()->active)->toBeTrue();
 });
 
-it('does not map a structured ClickUp folder when its client conflicts with the project', function () {
-    Project::factory()->create([
+it('creates a distinct project when a structured ClickUp folder conflicts with an existing client', function () {
+    $existingProject = Project::factory()->create([
         'clickup_space_id' => null,
         'clickup_folder_id' => null,
         'client' => 'Acme',
@@ -276,9 +276,77 @@ it('does not map a structured ClickUp folder when its client conflicts with the 
     );
 
     app(ClickUpSyncService::class)->sync($options);
+    app(ClickUpSyncService::class)->sync($options);
 
-    expect(ClickUpFolder::query()->where('clickup_folder_id', 'folder-project')->sole()->project_id)->toBeNull()
-        ->and(ClickUpList::query()->where('clickup_list_id', 'list-project')->sole()->project_id)->toBeNull();
+    $createdProject = Project::query()->where('client', 'Wrong Client')->where('name', 'Portal')->sole();
+
+    expect(Project::query()->count())->toBe(2)
+        ->and($existingProject->refresh()->clickup_folder_id)->toBeNull()
+        ->and($createdProject->clickup_folder_id)->toBe('folder-project')
+        ->and($createdProject->folder_name)->toBe('[Wrong Client][Portal]')
+        ->and(ClickUpFolder::query()->where('clickup_folder_id', 'folder-project')->sole()->project_id)->toBe($createdProject->id)
+        ->and(ClickUpList::query()->where('clickup_list_id', 'list-project')->sole()->project_id)->toBe($createdProject->id);
+});
+
+it('automatically claims an exact imported project and maps existing synchronized records', function () {
+    $project = Project::factory()->create([
+        'clickup_space_id' => null,
+        'clickup_folder_id' => null,
+        'client' => 'Acme',
+        'name' => 'Portal',
+    ]);
+    $folder = ClickUpFolder::factory()->create([
+        'clickup_folder_id' => 'folder-project',
+        'project_id' => null,
+        'kind' => ClickUpLocationKind::Unmapped,
+    ]);
+    $list = ClickUpList::factory()->create([
+        'click_up_folder_id' => $folder,
+        'clickup_list_id' => 'list-project',
+        'project_id' => null,
+    ]);
+    $task = ClickUpTask::factory()->create([
+        'clickup_task_id' => 'task-1',
+        'clickup_list_id' => $list->clickup_list_id,
+        'project_id' => null,
+    ]);
+    $entry = TimeEntry::factory()->create([
+        'clickup_time_entry_id' => 'entry-1',
+        'click_up_task_id' => $task,
+        'project_id' => null,
+        'started_at' => '2026-07-15 00:00:00',
+    ]);
+    app()->instance(ClickUpClient::class, clickUpClientFake());
+
+    app(ClickUpSyncService::class)->sync(new ClickUpSyncOptions(
+        from: CarbonImmutable::parse('2026-07-01')->startOfDay(),
+        to: CarbonImmutable::parse('2026-07-31')->endOfDay(),
+    ));
+
+    expect($project->refresh()->clickup_folder_id)->toBe('folder-project')
+        ->and($project->folder_name)->toBe('[Acme][Portal]')
+        ->and($folder->refresh()->project_id)->toBe($project->id)
+        ->and($folder->kind)->toBe(ClickUpLocationKind::Project)
+        ->and($list->refresh()->project_id)->toBe($project->id)
+        ->and($task->refresh()->project_id)->toBe($project->id)
+        ->and($entry->refresh()->project_id)->toBe($project->id);
+});
+
+it('leaves unstructured ClickUp folders unmapped instead of guessing', function () {
+    app()->instance(ClickUpClient::class, clickUpClientFake(projectFolderName: 'General Delivery'));
+    $defaults = ClickUpSyncOptions::defaults();
+
+    app(ClickUpSyncService::class)->sync(new ClickUpSyncOptions(
+        from: $defaults->from,
+        to: $defaults->to,
+        members: false,
+        tasks: false,
+        timeEntries: false,
+        timeOff: false,
+    ));
+
+    expect(Project::query()->count())->toBe(0)
+        ->and(ClickUpFolder::query()->where('clickup_folder_id', 'folder-project')->sole()->kind)->toBe(ClickUpLocationKind::Unmapped);
 });
 
 it('maps folders and lists by the explicit ClickUp folder id instead of their names', function () {
