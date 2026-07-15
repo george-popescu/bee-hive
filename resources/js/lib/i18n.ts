@@ -605,6 +605,91 @@ const romanianMessages = {
     available: 'disponibil',
     'planned next week': 'planificate săptămâna următoare',
     'selected tasks': 'taskuri selectate',
+    'Weekly team capacity': 'Capacitate săptămânală a echipei',
+    'All teams': 'Toate echipele',
+    'All visible people and all projects':
+        'Toate persoanele vizibile și toate proiectele',
+    'Next week': 'Săptămâna următoare',
+    'Contract capacity': 'Capacitate contractuală',
+    'Selected people': 'Persoane selectate',
+    'Available after leave': 'Disponibil după concedii',
+    ':hours leave / unavailable': ':hours concediu / indisponibil',
+    Allocated: 'Alocat',
+    ':count people over capacity': ':count persoane peste capacitate',
+    Unallocated: 'Nealocat',
+    ':count people without allocation': ':count persoane fără alocare',
+    'Team overview': 'Overview echipă',
+    'Available capacity equals contract capacity minus approved leave and unavailability.':
+        'Capacitatea disponibilă este capacitatea contractuală minus concediile și indisponibilitățile aprobate.',
+    'All capacity states': 'Toate stările de capacitate',
+    'Over capacity': 'Peste capacitate',
+    'Capacity available': 'Capacitate disponibilă',
+    'Fully allocated': 'Alocat complet',
+    'Without allocation': 'Fără alocare',
+    Contract: 'Contract',
+    Leave: 'Concediu',
+    'Allocation across all projects': 'Alocare pe toate proiectele',
+    Free: 'Liber',
+    'Role missing': 'Rol lipsă',
+    'No allocation': 'Fără alocare',
+    'No people match the selected filters.':
+        'Nicio persoană nu corespunde filtrelor selectate.',
+    'Weekly allocation is derived from the monthly HiveOps plan and distributed proportionally across the working days in this week.':
+        'Alocarea săptămânală este derivată din planul lunar HiveOps și distribuită proporțional pe zilele lucrătoare ale săptămânii.',
+    'Saved weekly hours are used when available. Allocations without a weekly distribution are prorated from the monthly plan by working days.':
+        'Orele săptămânale salvate sunt folosite când există. Alocările fără distribuție săptămânală sunt repartizate din planul lunar după zilele lucrătoare.',
+    'The allocation was saved.': 'Alocarea a fost salvată.',
+    'The allocation was deleted.': 'Alocarea a fost ștearsă.',
+    'Verify the allocation data and try again.':
+        'Verifică datele alocării și încearcă din nou.',
+    'The allocation could not be saved.': 'Alocarea nu a putut fi salvată.',
+    'The allocation could not be deleted.': 'Alocarea nu a putut fi ștearsă.',
+    'Capacity data missing': 'Date de capacitate lipsă',
+    'The impact cannot be calculated for the selected person and month.':
+        'Impactul nu poate fi calculat pentru persoana și luna selectate.',
+    'Available capacity': 'Capacitate disponibilă',
+    'After save': 'După salvare',
+    'Capacity remaining': 'Capacitate rămasă',
+    'Save allocation': 'Salvează alocarea',
+    'Weekly distribution': 'Distribuție săptămânală',
+    'Edit each week in quarter-hour steps. The monthly total is calculated automatically.':
+        'Editează fiecare săptămână în pași de 15 minute. Totalul lunar este calculat automat.',
+    'Monthly total': 'Total lunar',
+    'W:week': 'S:week',
+    'Planning comment': 'Comentariu de planificare',
+    'Add context, dependencies, or a delivery note for this allocation.':
+        'Adaugă context, dependențe sau o notă de livrare pentru această alocare.',
+    'Delete allocation': 'Șterge alocarea',
+    'Delete allocation?': 'Ștergi alocarea?',
+    'This removes the planned hours and weekly distribution. The deletion remains in the audit log.':
+        'Această acțiune elimină orele planificate și distribuția săptămânală. Ștergerea rămâne în jurnalul de audit.',
+    'Keep allocation': 'Păstrează alocarea',
+    'Edit allocation': 'Editează alocarea',
+    'Change hours, person, project, role, or month. Capacity impact is calculated before save.':
+        'Schimbă orele, persoana, proiectul, rolul sau luna. Impactul asupra capacității este calculat înainte de salvare.',
+    'Project missing': 'Proiect lipsă',
+    'Add allocation': 'Adaugă alocare',
+    'Allocation history': 'Istoric alocare',
+    'Allocated vs Actual': 'Alocat vs. Realizat',
+    'The dominant value is allocated capacity. Select a cell for capacity, actuals, and variance.':
+        'Valoarea dominantă este capacitatea alocată. Selectează o celulă pentru capacitate, realizat și abatere.',
+    'Add month': 'Adaugă lună',
+    'All months loaded': 'Toate lunile sunt încărcate',
+    Over: 'Peste',
+    'Actual marker': 'Marcaj realizat',
+    ':hours over capacity': ':hours peste capacitate',
+    ':hours capacity remaining': ':hours capacitate rămasă',
+    'Leave + unavailable': 'Concediu + indisponibil',
+    'No ClickUp time entries or audited adjustments for this month.':
+        'Nu există pontaje ClickUp sau ajustări auditate pentru această lună.',
+    ':hours versus allocation': ':hours față de alocare',
+    'Edit allocations': 'Editează alocările',
+    'Select a cell to see details.':
+        'Selectează o celulă pentru a vedea detaliile.',
+    'Planning period': 'Perioadă de planificare',
+    'Contract data missing': 'Date contractuale lipsă',
+    'Sales OS annex ID, contractual budget, start date, and deadline are not available yet. The metrics below use ClickUp execution only; no contractual budget or forecast is inferred.':
+        'ID-ul anexei din Sales OS, bugetul contractual, data de început și deadline-ul nu sunt încă disponibile. Metricile de mai jos folosesc doar execuția din ClickUp; nu este dedus niciun buget contractual sau forecast.',
     Pending: 'În așteptare',
 } as const;
 

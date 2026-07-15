@@ -7,6 +7,7 @@ use App\Models\Person;
 use App\Models\Project;
 use App\Models\Team;
 use App\Models\TimeEntry;
+use App\Models\TimeOff;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Permission;
@@ -65,6 +66,9 @@ it('shows a team lead only the active people in teams they lead', function () {
             ->where('months.0.key', '2026-05')
             ->where('months.7.key', '2026-12')
             ->has('planRows', 1)
+            ->has('teams', 1)
+            ->where('teams.0.id', $team->id)
+            ->where('weekly.rows.0.teamIds', [$team->id])
             ->where('planRows.0.person.name', 'Ana Vizibilă')
             ->where('planRows.0.project.label', 'Acme — Portal')
             ->where('planRows.0.hours.2026-05', 40)
@@ -159,4 +163,76 @@ it('aggregates ClickUp hours and audited adjustments for comparison including in
             ->where('adjustments.0.hoursDelta', 4)
             ->where('adjustments.0.isReversed', false)
             ->where('permissions.adjustActualHours', true));
+});
+
+it('builds weekly capacity from contract hours approved leave and monthly allocations', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo(PermissionName::ViewTeamLead->value, PermissionName::ViewManagement->value);
+    $person = Person::factory()->create([
+        'name' => 'Ana Planificată',
+        'job_role' => 'BE Dev',
+        'default_monthly_capacity_hours' => 160,
+        'weekly_capacity_hours' => 40,
+    ]);
+    $project = Project::factory()->create(['client' => 'Acme', 'name' => 'Portal']);
+    Allocation::factory()->create([
+        'person_id' => $person,
+        'project_id' => $project,
+        'role' => 'BE Dev',
+        'month' => '2026-07-01',
+        'planned_hours' => 92,
+    ]);
+    TimeOff::factory()->create([
+        'person_id' => $person,
+        'status' => 'approved',
+        'start_date' => '2026-07-14',
+        'end_date' => '2026-07-14',
+        'active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('team_lead.index', ['week' => '2026-07-13']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('weekly.period.start', '2026-07-13')
+            ->where('weekly.period.end', '2026-07-19')
+            ->where('weekly.allocationMethod', 'weekly_with_monthly_fallback')
+            ->where('weekly.rows.0.person.name', 'Ana Planificată')
+            ->where('weekly.rows.0.contractHours', 40)
+            ->where('weekly.rows.0.leaveHours', 8)
+            ->where('weekly.rows.0.availableHours', 32)
+            ->where('weekly.rows.0.allocatedHours', 20)
+            ->where('weekly.rows.0.freeHours', 12)
+            ->where('weekly.rows.0.allocations.0.label', 'Acme — Portal')
+            ->where('capacityRows.0.months.2026-07.grossHours', 160)
+            ->where('capacityRows.0.months.2026-07.leaveHours', 8)
+            ->where('capacityRows.0.months.2026-07.availableHours', 152)
+            ->where('capacityRows.0.months.2026-07.allocatedHours', 92)
+            ->where('capacityRows.0.months.2026-07.actualHours', null)
+            ->has('allocationEntries', 1));
+});
+
+it('uses saved weekly distribution before the monthly proration fallback', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo(PermissionName::ViewTeamLead->value, PermissionName::ViewManagement->value);
+    $person = Person::factory()->create(['weekly_capacity_hours' => 40]);
+    $project = Project::factory()->create(['client' => 'Acme', 'name' => 'Portal']);
+    Allocation::factory()->create([
+        'person_id' => $person,
+        'project_id' => $project,
+        'month' => '2026-07-01',
+        'planned_hours' => 24,
+        'weekly_hours' => [
+            ['week_start' => '2026-07-06', 'hours' => 8],
+            ['week_start' => '2026-07-13', 'hours' => 16],
+        ],
+        'planning_comment' => 'Prioritate pentru lansare.',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('team_lead.index', ['week' => '2026-07-13']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('weekly.rows.0.allocatedHours', 16)
+            ->where('weekly.rows.0.allocations.0.source', 'weekly')
+            ->where('allocationEntries.0.weeklyHours.1.hours', 16)
+            ->where('allocationEntries.0.planningComment', 'Prioritate pentru lansare.'));
 });

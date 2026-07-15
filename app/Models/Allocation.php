@@ -8,12 +8,22 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int $person_id
+ * @property int $project_id
+ * @property string $role
+ * @property float|string $planned_hours
+ * @property list<array{week_start: string, hours: float|int}>|null $weekly_hours
+ * @property string|null $planning_comment
+ */
 #[Fillable([
     'person_id',
     'project_id',
     'role',
     'month',
     'planned_hours',
+    'weekly_hours',
+    'planning_comment',
     'created_by',
     'updated_by',
 ])]
@@ -52,6 +62,7 @@ class Allocation extends Model
         return [
             'month' => 'date',
             'planned_hours' => 'decimal:2',
+            'weekly_hours' => 'array',
         ];
     }
 }

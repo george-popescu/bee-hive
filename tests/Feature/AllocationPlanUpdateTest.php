@@ -2,6 +2,7 @@
 
 use App\Enums\PermissionName;
 use App\Models\Allocation;
+use App\Models\AuditLog;
 use App\Models\Person;
 use App\Models\Project;
 use App\Models\Team;
@@ -109,4 +110,154 @@ it('forbids users without allocation permission', function () {
         'month' => '2026-07',
         'planned_hours' => 8,
     ])->assertForbidden();
+});
+
+it('moves an allocation between people projects and months with an audit record', function () {
+    [$user, $person] = allocationEditor();
+    $team = $person->teams()->firstOrFail();
+    $targetPerson = Person::factory()->create();
+    $team->people()->attach($targetPerson);
+    $targetProject = Project::factory()->create();
+    $allocation = $person->allocations()->whereDate('month', '2026-05-01')->sole();
+    $originalHours = (float) $allocation->planned_hours;
+
+    $this->actingAs($user)->putJson(route('allocations.update', $allocation), [
+        'person_id' => $targetPerson->id,
+        'project_id' => $targetProject->id,
+        'role' => 'QA',
+        'month' => '2026-07',
+        'planned_hours' => 12.25,
+    ])->assertSuccessful()
+        ->assertJsonPath('allocation.id', $allocation->id)
+        ->assertJsonPath('allocation.person_id', $targetPerson->id)
+        ->assertJsonPath('allocation.project_id', $targetProject->id)
+        ->assertJsonPath('allocation.month', '2026-07')
+        ->assertJsonPath('allocation.planned_hours', 12.25);
+
+    $allocation->refresh();
+
+    expect($allocation->person_id)->toBe($targetPerson->id)
+        ->and($allocation->project_id)->toBe($targetProject->id)
+        ->and($allocation->role)->toBe('QA')
+        ->and($allocation->month->format('Y-m'))->toBe('2026-07')
+        ->and($allocation->planned_hours)->toBe('12.25');
+
+    $audit = AuditLog::query()->where('action', 'allocation.updated')->sole();
+
+    expect($audit->before)->toMatchArray([
+        'person_id' => $person->id,
+        'planned_hours' => $originalHours,
+    ])->and($audit->after)->toMatchArray([
+        'person_id' => $targetPerson->id,
+        'project_id' => $targetProject->id,
+        'planned_hours' => 12.25,
+    ]);
+});
+
+it('stores an editable weekly distribution and planning comment', function () {
+    [$user, $person, $project] = allocationEditor();
+
+    $this->actingAs($user)->putJson(route('allocations.upsert'), [
+        'person_id' => $person->id,
+        'project_id' => $project->id,
+        'role' => 'QA',
+        'month' => '2026-07',
+        'planned_hours' => 20,
+        'weekly_hours' => [
+            ['week_start' => '2026-07-06', 'hours' => 8],
+            ['week_start' => '2026-07-13', 'hours' => 12],
+        ],
+        'planning_comment' => 'Pregătire release și suport QA.',
+    ])->assertSuccessful()
+        ->assertJsonPath('allocation.weekly_hours.1.hours', 12)
+        ->assertJsonPath('allocation.planning_comment', 'Pregătire release și suport QA.');
+
+    $allocation = Allocation::query()
+        ->where('person_id', $person->id)
+        ->where('project_id', $project->id)
+        ->where('role', 'QA')
+        ->whereDate('month', '2026-07-01')
+        ->sole();
+
+    expect($allocation->weekly_hours)->toBe([
+        ['week_start' => '2026-07-06', 'hours' => 8],
+        ['week_start' => '2026-07-13', 'hours' => 12],
+    ])->and($allocation->planning_comment)->toBe('Pregătire release și suport QA.');
+});
+
+it('validates weekly distribution dates and monthly total', function () {
+    [$user, $person, $project] = allocationEditor();
+
+    $this->actingAs($user)->putJson(route('allocations.upsert'), [
+        'person_id' => $person->id,
+        'project_id' => $project->id,
+        'role' => 'QA',
+        'month' => '2026-07',
+        'planned_hours' => 20,
+        'weekly_hours' => [
+            ['week_start' => '2026-07-07', 'hours' => 8],
+            ['week_start' => '2026-08-10', 'hours' => 8],
+        ],
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors([
+            'weekly_hours',
+            'weekly_hours.0.week_start',
+            'weekly_hours.1.week_start',
+        ]);
+});
+
+it('clears a stale weekly distribution when the monthly grid changes its total', function () {
+    [$user, $person, $project] = allocationEditor();
+    $allocation = Allocation::factory()->create([
+        'person_id' => $person,
+        'project_id' => $project,
+        'role' => 'QA',
+        'month' => '2026-07-01',
+        'planned_hours' => 20,
+        'weekly_hours' => [
+            ['week_start' => '2026-07-06', 'hours' => 8],
+            ['week_start' => '2026-07-13', 'hours' => 12],
+        ],
+        'planning_comment' => 'Comentariul rămâne relevant.',
+    ]);
+
+    $this->actingAs($user)->putJson(route('allocations.upsert'), [
+        'person_id' => $person->id,
+        'project_id' => $project->id,
+        'role' => 'QA',
+        'month' => '2026-07',
+        'planned_hours' => 24,
+    ])->assertSuccessful();
+
+    $allocation->refresh();
+
+    expect($allocation->planned_hours)->toBe('24.00')
+        ->and($allocation->weekly_hours)->toBeNull()
+        ->and($allocation->planning_comment)->toBe('Comentariul rămâne relevant.');
+});
+
+it('deletes only scoped allocations and keeps an audit record', function () {
+    [$user, $person] = allocationEditor();
+    $allocation = $person->allocations()->whereDate('month', '2026-05-01')->sole();
+
+    $this->actingAs($user)
+        ->deleteJson(route('allocations.destroy', $allocation))
+        ->assertSuccessful()
+        ->assertJsonPath('deleted', true);
+
+    expect(Allocation::query()->whereKey($allocation->id)->exists())->toBeFalse();
+
+    $audit = AuditLog::query()->where('action', 'allocation.deleted')->sole();
+
+    expect($audit->auditable_id)->toBe($allocation->id)
+        ->and($audit->before)->toMatchArray(['person_id' => $person->id])
+        ->and($audit->after)->toBe([]);
+
+    $outside = Allocation::factory()->create(['month' => '2026-07-01']);
+
+    $this->actingAs($user)
+        ->deleteJson(route('allocations.destroy', $outside))
+        ->assertForbidden();
+
+    expect($outside->fresh())->not->toBeNull();
 });

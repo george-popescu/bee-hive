@@ -3,13 +3,16 @@
 namespace App\Services\TeamLead;
 
 use App\Enums\PermissionName;
+use App\Enums\TimeOffStatus;
 use App\Models\ActualAdjustment;
 use App\Models\Allocation;
+use App\Models\AuditLog;
 use App\Models\Person;
 use App\Models\Project;
 use App\Models\TimeEntry;
 use App\Models\User;
 use App\Services\Capacity\PlanVarianceCalculator;
+use App\Services\Capacity\SettingsService;
 use App\Services\Planning\PlanningPeriod;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -21,23 +24,37 @@ final class TeamLeadPlanData
         private readonly TeamLeadScope $scope,
         private readonly PlanningPeriod $period,
         private readonly PlanVarianceCalculator $variance,
+        private readonly SettingsService $settings,
     ) {}
 
     /** @return array<string, mixed> */
-    public function for(User $user): array
+    public function for(User $user, CarbonImmutable $week): array
     {
         $months = $this->period->months();
         $firstMonth = $months[0] ?? throw new LogicException('The planning period has no months.');
         $lastMonth = $months[count($months) - 1] ?? throw new LogicException('The planning period has no months.');
         $monthKeys = array_map(fn (CarbonImmutable $month): string => $month->format('Y-m'), $months);
         $personIds = $this->scope->personIds($user);
+        $timeOffRangeStart = $firstMonth->startOfMonth()->min($week->startOfWeek());
+        $timeOffRangeEnd = $lastMonth->endOfMonth()->max($week->endOfWeek());
         $people = Person::query()
-            ->select(['id', 'name', 'job_role', 'default_monthly_capacity_hours', 'is_external'])
+            ->select(['id', 'name', 'job_role', 'default_monthly_capacity_hours', 'weekly_capacity_hours', 'is_external'])
             ->whereIn('id', $personIds)
             ->where('active', true)
-            ->with(['capacities' => fn ($query) => $query
-                ->select(['id', 'person_id', 'month', 'capacity_hours'])
-                ->whereBetween('month', [$firstMonth, $lastMonth])])
+            ->with([
+                'capacities' => fn ($query) => $query
+                    ->select(['id', 'person_id', 'month', 'capacity_hours'])
+                    ->whereBetween('month', [$firstMonth, $lastMonth]),
+                'teams' => fn ($query) => $query
+                    ->select(['teams.id', 'teams.name'])
+                    ->where('teams.active', true)
+                    ->orderBy('teams.name'),
+                'timeOffs' => fn ($query) => $query
+                    ->select(['id', 'person_id', 'status', 'start_date', 'end_date', 'active'])
+                    ->where('active', true)
+                    ->whereDate('start_date', '<=', $timeOffRangeEnd->toDateString())
+                    ->whereDate('end_date', '>=', $timeOffRangeStart->toDateString()),
+            ])
             ->orderBy('name')
             ->get()
             ->keyBy('id');
@@ -48,9 +65,10 @@ final class TeamLeadPlanData
             ->get()
             ->keyBy('id');
         $allocations = Allocation::query()
-            ->select(['id', 'person_id', 'project_id', 'role', 'month', 'planned_hours'])
+            ->select(['id', 'person_id', 'project_id', 'role', 'month', 'planned_hours', 'weekly_hours', 'planning_comment', 'updated_by', 'updated_at'])
             ->whereIn('person_id', $people->keys())
             ->whereBetween('month', [$firstMonth, $lastMonth])
+            ->with(['updater:id,name'])
             ->orderBy('person_id')
             ->orderBy('project_id')
             ->orderBy('role')
@@ -85,6 +103,7 @@ final class TeamLeadPlanData
             lastMonth: $lastMonth,
         );
         $adjustmentRows = $this->adjustmentRows($people, $allProjects, $firstMonth, $lastMonth);
+        $capacityRows = $this->capacityRows($people, $allocations, $comparisonRows, $monthKeys);
 
         return [
             'months' => array_map(fn (CarbonImmutable $month): array => [
@@ -94,7 +113,17 @@ final class TeamLeadPlanData
             'people' => $people->map(fn (Person $person): array => [
                 'id' => $person->getKey(),
                 'name' => $person->name,
+                'jobRole' => $person->job_role,
+                'isExternal' => $person->is_external,
+                'teamIds' => $person->teams->pluck('id')->map(fn (mixed $id): int => (int) $id)->values()->all(),
             ])->values()->all(),
+            'teams' => $people
+                ->flatMap->teams
+                ->unique('id')
+                ->sortBy('name')
+                ->map(fn ($team): array => ['id' => (int) $team->getKey(), 'name' => $team->name])
+                ->values()
+                ->all(),
             'projects' => $allProjects->map(fn (Project $project): array => $this->projectData($project))->values()->all(),
             'roles' => $allocations->pluck('role')
                 ->merge($people->pluck('job_role'))
@@ -105,12 +134,329 @@ final class TeamLeadPlanData
                 ->all(),
             'planRows' => array_values($rows),
             'comparisonRows' => $comparisonRows,
+            'capacityRows' => $capacityRows,
+            'weekly' => $this->weeklyData($people, $allProjects, $week),
+            'allocationEntries' => $allocations->map(fn (Allocation $allocation): array => [
+                'id' => $allocation->getKey(),
+                'personId' => $allocation->person_id,
+                'projectId' => $allocation->project_id,
+                'role' => $allocation->role,
+                'month' => CarbonImmutable::parse($allocation->month)->format('Y-m'),
+                'hours' => (float) $allocation->planned_hours,
+                'weeklyHours' => collect($allocation->weekly_hours ?? [])->map(fn (array $week): array => [
+                    'weekStart' => $week['week_start'],
+                    'hours' => (float) $week['hours'],
+                ])->values()->all(),
+                'planningComment' => $allocation->planning_comment,
+                'updatedBy' => $allocation->updater?->name,
+                'updatedAt' => $allocation->updated_at?->toIso8601String(),
+            ])->values()->all(),
+            'allocationHistory' => $this->allocationHistory($allocations),
             'adjustments' => $adjustmentRows,
             'permissions' => [
                 'manageAllocations' => $user->can(PermissionName::ManageAllocations->value),
                 'adjustActualHours' => $user->can(PermissionName::AdjustActualHours->value),
             ],
         ];
+    }
+
+    /**
+     * @param  Collection<int, Person>  $people
+     * @param  Collection<int, Project>  $projects
+     * @return array<string, mixed>
+     */
+    private function weeklyData(Collection $people, Collection $projects, CarbonImmutable $week): array
+    {
+        $weekStart = $week->startOfWeek();
+        $weekEnd = $weekStart->endOfWeek();
+        $allocations = Allocation::query()
+            ->select(['person_id', 'project_id', 'role', 'month', 'planned_hours', 'weekly_hours'])
+            ->whereIn('person_id', $people->keys())
+            ->whereBetween('month', [$weekStart->startOfMonth(), $weekEnd->startOfMonth()])
+            ->get();
+        $partsByPerson = [];
+        $rolesByPerson = [];
+
+        foreach ($allocations as $allocation) {
+            $project = $projects->get($allocation->project_id);
+
+            if ($project === null) {
+                continue;
+            }
+
+            $personId = (int) $allocation->person_id;
+            $projectId = (int) $allocation->project_id;
+
+            if ($allocation->role !== '') {
+                $rolesByPerson[$personId][$allocation->role] = true;
+            }
+
+            $nativeWeek = collect($allocation->weekly_hours ?? [])->first(
+                fn (array $candidate): bool => $candidate['week_start'] === $weekStart->toDateString(),
+            );
+            $source = $nativeWeek === null ? 'prorated' : 'weekly';
+
+            if ($nativeWeek !== null) {
+                $hours = (float) $nativeWeek['hours'];
+            } else {
+                $month = CarbonImmutable::parse($allocation->month)->startOfMonth();
+                $monthWorkingDays = $this->workingDays($month, $month->endOfMonth());
+                $weekWorkingDays = $this->workingDays($month->max($weekStart), $month->endOfMonth()->min($weekEnd));
+
+                if ($monthWorkingDays === 0 || $weekWorkingDays === 0) {
+                    continue;
+                }
+
+                $hours = (float) $allocation->planned_hours * $weekWorkingDays / $monthWorkingDays;
+            }
+
+            if ($hours <= 0) {
+                continue;
+            }
+
+            $partsByPerson[$personId][$projectId] ??= [
+                'projectId' => $projectId,
+                'label' => $this->projectData($project)['label'],
+                'hours' => 0.0,
+                'sources' => [],
+            ];
+            $partsByPerson[$personId][$projectId]['hours'] += $hours;
+            $partsByPerson[$personId][$projectId]['sources'][$source] = true;
+        }
+
+        $rows = $people->map(function (Person $person) use ($partsByPerson, $rolesByPerson, $weekStart, $weekEnd): array {
+            $contractHours = $person->weekly_capacity_hours === null
+                ? (float) $person->default_monthly_capacity_hours * 12 / 52
+                : (float) $person->weekly_capacity_hours;
+            $leaveDays = $person->is_external ? 0 : $this->leaveWorkingDays($person, $weekStart, $weekEnd);
+            $leaveHours = round($leaveDays * $this->settings->hoursPerLeaveDay(), 2);
+            $availableHours = max(0, round($contractHours - $leaveHours, 2));
+            $parts = collect($partsByPerson[$person->getKey()] ?? [])
+                ->map(fn (array $part): array => [
+                    'projectId' => $part['projectId'],
+                    'label' => $part['label'],
+                    'hours' => round((float) $part['hours'], 2),
+                    'source' => $this->allocationSource($part['sources']),
+                ])
+                ->sortByDesc('hours')
+                ->values();
+            $allocatedHours = round((float) $parts->sum('hours'), 2);
+            $freeHours = round($availableHours - $allocatedHours, 2);
+            $status = $freeHours < 0
+                ? 'over'
+                : ($allocatedHours <= 0 ? 'unallocated' : ($freeHours > 0 ? 'available' : 'balanced'));
+
+            return [
+                'person' => [
+                    'id' => $person->getKey(),
+                    'name' => $person->name,
+                    'jobRole' => $person->job_role,
+                    'isExternal' => $person->is_external,
+                ],
+                'roles' => array_values(array_unique(array_filter([
+                    $person->job_role,
+                    ...array_keys($rolesByPerson[$person->getKey()] ?? []),
+                ]))),
+                'teamIds' => $person->teams->pluck('id')->map(fn (mixed $id): int => (int) $id)->values()->all(),
+                'contractHours' => round($contractHours, 2),
+                'leaveHours' => $leaveHours,
+                'availableHours' => $availableHours,
+                'allocatedHours' => $allocatedHours,
+                'freeHours' => $freeHours,
+                'status' => $status,
+                'allocations' => $parts->all(),
+            ];
+        })->values();
+
+        return [
+            'period' => [
+                'start' => $weekStart->toDateString(),
+                'end' => $weekEnd->toDateString(),
+                'previous' => $weekStart->subWeek()->toDateString(),
+                'next' => $weekStart->addWeek()->toDateString(),
+            ],
+            'allocationMethod' => 'weekly_with_monthly_fallback',
+            'rows' => $rows->all(),
+            'totals' => [
+                'contractHours' => round((float) $rows->sum('contractHours'), 2),
+                'leaveHours' => round((float) $rows->sum('leaveHours'), 2),
+                'availableHours' => round((float) $rows->sum('availableHours'), 2),
+                'allocatedHours' => round((float) $rows->sum('allocatedHours'), 2),
+                'freeHours' => round((float) $rows->sum(fn (array $row): float => max(0, $row['freeHours'])), 2),
+                'overallocatedPeople' => $rows->where('status', 'over')->count(),
+                'unallocatedPeople' => $rows->where('status', 'unallocated')->count(),
+            ],
+        ];
+    }
+
+    /**
+     * @param  Collection<int, Person>  $people
+     * @param  Collection<int, Allocation>  $allocations
+     * @param  list<array<string, mixed>>  $comparisonRows
+     * @param  list<string>  $monthKeys
+     * @return list<array<string, mixed>>
+     */
+    private function capacityRows(Collection $people, Collection $allocations, array $comparisonRows, array $monthKeys): array
+    {
+        $allocated = [];
+        $actual = [];
+        $roles = [];
+
+        foreach ($allocations as $allocation) {
+            $month = CarbonImmutable::parse($allocation->month)->format('Y-m');
+            $allocated[$allocation->person_id][$month] ??= 0.0;
+            $allocated[$allocation->person_id][$month] += (float) $allocation->planned_hours;
+
+            if ($allocation->role !== '') {
+                $roles[$allocation->person_id][$allocation->role] = true;
+            }
+        }
+
+        foreach ($comparisonRows as $row) {
+            $personId = (int) $row['person']['id'];
+
+            foreach ($row['months'] as $month => $values) {
+                if ($values['actual'] === null) {
+                    continue;
+                }
+
+                $actual[$personId][$month] ??= 0.0;
+                $actual[$personId][$month] += (float) $values['actual'];
+            }
+        }
+
+        return array_values($people->map(function (Person $person) use ($actual, $allocated, $monthKeys, $roles): array {
+            $months = [];
+
+            foreach ($monthKeys as $monthKey) {
+                $month = CarbonImmutable::parse($monthKey.'-01');
+                $grossHours = $this->monthlyGrossHours($person, $monthKey);
+                $leaveDays = $person->is_external ? 0 : $this->leaveWorkingDays($person, $month, $month->endOfMonth());
+                $leaveHours = round($leaveDays * $this->settings->hoursPerLeaveDay(), 2);
+                $availableHours = max(0, round($grossHours - $leaveHours, 2));
+                $allocatedHours = round((float) ($allocated[$person->getKey()][$monthKey] ?? 0), 2);
+                $actualHours = array_key_exists($monthKey, $actual[$person->getKey()] ?? [])
+                    ? round((float) $actual[$person->getKey()][$monthKey], 2)
+                    : null;
+
+                $months[$monthKey] = [
+                    'grossHours' => round($grossHours, 2),
+                    'leaveHours' => $leaveHours,
+                    'availableHours' => $availableHours,
+                    'allocatedHours' => $allocatedHours,
+                    'actualHours' => $actualHours,
+                    'allocationPercent' => $availableHours > 0
+                        ? round($allocatedHours / $availableHours * 100, 1)
+                        : null,
+                    'freeHours' => round($availableHours - $allocatedHours, 2),
+                ];
+            }
+
+            return [
+                'person' => [
+                    'id' => $person->getKey(),
+                    'name' => $person->name,
+                    'jobRole' => $person->job_role,
+                    'isExternal' => $person->is_external,
+                ],
+                'roles' => array_values(array_unique(array_filter([
+                    $person->job_role,
+                    ...array_keys($roles[$person->getKey()] ?? []),
+                ]))),
+                'months' => $months,
+            ];
+        })->values()->all());
+    }
+
+    /**
+     * @param  Collection<int, Allocation>  $allocations
+     * @return list<array<string, mixed>>
+     */
+    private function allocationHistory(Collection $allocations): array
+    {
+        if ($allocations->isEmpty()) {
+            return [];
+        }
+
+        return array_values(AuditLog::query()
+            ->where('auditable_type', Allocation::class)
+            ->whereIn('auditable_id', $allocations->pluck('id')->all())
+            ->whereIn('action', ['allocation.upserted', 'allocation.updated'])
+            ->latest('id')
+            ->limit(30)
+            ->get()
+            ->map(fn (AuditLog $log): array => [
+                'id' => (int) $log->getKey(),
+                'allocationId' => (int) $log->auditable_id,
+                'action' => $log->action,
+                'author' => is_string($log->actor_name) && $log->actor_name !== ''
+                    ? $log->actor_name
+                    : 'Unknown',
+                'before' => is_array($log->before) ? $log->before : null,
+                'after' => is_array($log->after) ? $log->after : null,
+                'createdAt' => $log->created_at?->toIso8601String(),
+            ])
+            ->all());
+    }
+
+    private function monthlyGrossHours(Person $person, string $month): float
+    {
+        foreach ($person->capacities as $capacity) {
+            if (CarbonImmutable::parse($capacity->month)->format('Y-m') === $month) {
+                return (float) $capacity->capacity_hours;
+            }
+        }
+
+        return (float) $person->default_monthly_capacity_hours;
+    }
+
+    private function leaveWorkingDays(Person $person, CarbonImmutable $start, CarbonImmutable $end): int
+    {
+        $dates = [];
+
+        foreach ($person->timeOffs as $timeOff) {
+            if (! TimeOffStatus::reducesCapacityFor($timeOff->status)) {
+                continue;
+            }
+
+            $rangeStart = CarbonImmutable::parse($timeOff->start_date)->max($start);
+            $rangeEnd = CarbonImmutable::parse($timeOff->end_date)->min($end);
+
+            for ($date = $rangeStart; $date->lte($rangeEnd); $date = $date->addDay()) {
+                if ($date->isWeekday()) {
+                    $dates[$date->toDateString()] = true;
+                }
+            }
+        }
+
+        return count($dates);
+    }
+
+    private function workingDays(CarbonImmutable $start, CarbonImmutable $end): int
+    {
+        if ($start->gt($end)) {
+            return 0;
+        }
+
+        $days = 0;
+
+        for ($date = $start; $date->lte($end); $date = $date->addDay()) {
+            if ($date->isWeekday()) {
+                $days++;
+            }
+        }
+
+        return $days;
+    }
+
+    /** @param array<string, bool> $sources */
+    private function allocationSource(array $sources): string
+    {
+        if (count($sources) > 1) {
+            return 'mixed';
+        }
+
+        return array_key_first($sources) ?? 'prorated';
     }
 
     /**

@@ -1,5 +1,6 @@
 import { Head, Link, router, setLayoutProps, useHttp } from '@inertiajs/react';
 import {
+    AlertTriangle,
     ArrowLeft,
     ArrowRight,
     ChevronDown,
@@ -21,6 +22,7 @@ import {
 } from '@/actions/App/Http/Controllers/WeeklyPlanningController';
 import { SummaryCharts } from '@/components/pm-board/summary-charts';
 import type { SummaryChartData } from '@/components/pm-board/summary-charts';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -1195,6 +1197,20 @@ export default function PmBoard({
                                 </div>
                             </CardContent>
                         </Card>
+
+                        {isDeliverables && (
+                            <Alert className="border-warning/50 bg-warning/10">
+                                <AlertTriangle className="text-warning-foreground" />
+                                <AlertTitle>
+                                    {t('Contract data missing')}
+                                </AlertTitle>
+                                <AlertDescription>
+                                    {t(
+                                        'Sales OS annex ID, contractual budget, start date, and deadline are not available yet. The metrics below use ClickUp execution only; no contractual budget or forecast is inferred.',
+                                    )}
+                                </AlertDescription>
+                            </Alert>
+                        )}
 
                         <div
                             className={`grid gap-3 sm:grid-cols-2 ${isDeliverables ? 'xl:grid-cols-7' : 'xl:grid-cols-5'}`}

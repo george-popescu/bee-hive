@@ -1,5 +1,7 @@
 <?php
 
+use Inertia\Testing\AssertableInertia as Assert;
+
 test('returns the HiveOps application shell', function () {
     config()->set('app.name', 'BEE CODED HiveOps');
 
@@ -7,7 +9,9 @@ test('returns the HiveOps application shell', function () {
 
     $response
         ->assertOk()
-        ->assertSee('Capacity, allocation and delivery - BEE CODED HiveOps')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('welcome')
+            ->where('name', 'BEE CODED HiveOps'))
         ->assertSee('href="/favicon.svg"', false)
         ->assertDontSee('href="/favicon.ico"', false);
 });

@@ -65,6 +65,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('allocations', [AllocationController::class, 'upsert'])
         ->middleware('can:'.PermissionName::ManageAllocations->value)
         ->name('allocations.upsert');
+    Route::put('allocations/{allocation}', [AllocationController::class, 'update'])
+        ->middleware('can:'.PermissionName::ManageAllocations->value)
+        ->name('allocations.update');
+    Route::delete('allocations/{allocation}', [AllocationController::class, 'destroy'])
+        ->middleware('can:'.PermissionName::ManageAllocations->value)
+        ->name('allocations.destroy');
     Route::post('actual-adjustments', [ActualAdjustmentController::class, 'store'])
         ->middleware('can:'.PermissionName::AdjustActualHours->value)
         ->name('actual_adjustments.store');

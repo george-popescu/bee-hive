@@ -26,7 +26,9 @@ it('renders the Romanian application shell when selected', function () {
         ->get(route('home'))
         ->assertSuccessful()
         ->assertSee('<html lang="ro"', false)
-        ->assertSee('Capacitate, alocare și livrare');
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('welcome')
+            ->where('locale', 'ro'));
 });
 
 it('rejects unsupported locales', function () {
