@@ -602,6 +602,7 @@ const romanianMessages = {
     'Active tasks': 'Taskuri active',
     'Active tasks are ordered by status and due date.':
         'Taskuri active ordonate după status și termen.',
+    ':count active ClickUp tasks': ':count taskuri ClickUp active',
     'All PMs': 'Toți PM-ii',
     'All projects · :hours': 'Toate proiectele · :hours',
     'Apply selection': 'Aplică selecția',

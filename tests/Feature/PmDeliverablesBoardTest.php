@@ -186,7 +186,13 @@ it('excludes configured tasks only from upcoming and planning while retaining wo
     $resource = Person::factory()->create(['weekly_capacity_hours' => 40]);
     $project = Project::factory()->create([
         'contract_type' => ProjectBoardTemplate::Deliverables,
-        'board_config' => ['excluded_task_ids' => ['excluded-recurring-task']],
+        'board_config' => [
+            'annex_modules' => [
+                'included-task' => 'Delivery',
+                'excluded-recurring-task' => 'Recurring operations',
+            ],
+            'excluded_task_ids' => ['excluded-recurring-task'],
+        ],
     ]);
     $includedTask = ClickUpTask::factory()->create([
         'project_id' => $project,
@@ -233,18 +239,31 @@ it('excludes configured tasks only from upcoming and planning while retaining wo
         'period' => 'week',
         'anchor' => '2026-07-08',
     ]));
+    $followingWeekResponse = $this->actingAs($user)->get(route('pm_board.index', [
+        'project' => $project->id,
+        'period' => 'week',
+        'anchor' => '2026-07-15',
+    ]));
 
     $workedIds = collect($response->inertiaProps('workedTasks'))->pluck('clickupId');
     $upcomingIds = collect($response->inertiaProps('upcomingTasks'))->pluck('clickupId');
     $plannedTaskIds = collect($response->inertiaProps('planning.plans'))->pluck('taskId');
     $ganttIds = collect($response->inertiaProps('gantt.rows'))->pluck('id');
+    $followingWeekAnnexBoard = $followingWeekResponse->inertiaProps('annexBoard');
 
     expect($workedIds)->toContain('excluded-recurring-task')
         ->and($upcomingIds)->toContain('included-task')
         ->and($upcomingIds)->not->toContain('excluded-recurring-task')
         ->and($plannedTaskIds)->toContain($includedTask->id)
         ->and($plannedTaskIds)->not->toContain($excludedTask->id)
-        ->and($ganttIds)->toContain($includedTask->id, $excludedTask->id);
+        ->and($ganttIds)->toContain($includedTask->id, $excludedTask->id)
+        ->and(collect($followingWeekAnnexBoard['annexes'])->pluck('label'))
+        ->toContain('Recurring operations')
+        ->and($followingWeekAnnexBoard['totals']['consumedHours'])->toEqual(2.0)
+        ->and(collect($followingWeekAnnexBoard['weeklyRows'])->pluck('taskId'))
+        ->not->toContain($excludedTask->id)
+        ->and(collect($followingWeekAnnexBoard['activeRows'])->pluck('taskId'))
+        ->not->toContain($excludedTask->id);
 });
 
 it('loads independent persisted plans for each following week', function () {
@@ -403,6 +422,131 @@ it('builds a truthful annex board from dynamic task scopes and weekly plans', fu
         ->and($annexBoard['totals']['consumedHours'])->toEqual(11.0)
         ->and($annexBoard['totals']['closestDueDate'])->toBe('2026-07-18')
         ->and($annexBoard['totals']['taskCount'])->toBe(4);
+});
+
+it('keeps active ClickUp tasks visible when the selected week has no work or plan', function () {
+    $user = deliverablesBoardViewer();
+    $project = Project::factory()->create([
+        'contract_type' => ProjectBoardTemplate::Deliverables,
+        'board_config' => [
+            'annex_modules' => [
+                'historical-task' => 'Maintenance',
+                'signal-less-task' => 'Regression',
+                'closed-task' => 'Regression',
+            ],
+            'excluded_task_ids' => [],
+        ],
+    ]);
+    $historicalTask = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_task_id' => 'historical-task',
+        'name' => 'Maintain the existing integration',
+        'status' => 'in progress',
+        'estimate_seconds' => null,
+        'tracked_seconds' => null,
+        'start_at' => null,
+        'due_at' => null,
+    ]);
+    $signalLessTask = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_task_id' => 'signal-less-task',
+        'name' => 'Reproduce intermittent regression',
+        'status' => 'regression',
+        'estimate_seconds' => null,
+        'tracked_seconds' => null,
+        'start_at' => null,
+        'due_at' => null,
+    ]);
+    $closedTask = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_task_id' => 'closed-task',
+        'name' => 'Already delivered regression fix',
+        'status' => 'closed',
+        'estimate_seconds' => null,
+        'tracked_seconds' => null,
+        'start_at' => null,
+        'due_at' => null,
+    ]);
+    TimeEntry::factory()->create([
+        'project_id' => $project,
+        'click_up_task_id' => $historicalTask,
+        'started_at' => '2026-07-08 10:00:00',
+        'duration_seconds' => 4 * 3600,
+    ]);
+
+    $response = $this->actingAs($user)->get(route('pm_board.index', [
+        'project' => $project->id,
+        'period' => 'week',
+        'anchor' => '2026-07-15',
+    ]));
+
+    $response->assertSuccessful()->assertInertia(fn (Assert $page) => $page
+        ->has('annexBoard.activeRows', 2)
+        ->has('annexBoard.weeklyRows', 0)
+        ->has('annexBoard.agreedRows', 0));
+
+    $annexBoard = $response->inertiaProps('annexBoard');
+    $activeRows = collect($annexBoard['activeRows']);
+    $historicalRow = $activeRows->firstWhere('taskId', $historicalTask->id);
+    $signalLessRow = $activeRows->firstWhere('taskId', $signalLessTask->id);
+
+    expect(collect($annexBoard['annexes'])->pluck('label'))
+        ->toContain('Maintenance')
+        ->not->toContain('Regression')
+        ->and($annexBoard['totals']['consumedHours'])->toEqual(4.0)
+        ->and($historicalRow)->toMatchArray([
+            'workedHours' => 0.0,
+            'totalLoggedHours' => 4.0,
+        ])->and($signalLessRow)->toMatchArray([
+            'annexLabel' => 'Regression',
+            'status' => 'regression',
+            'plannedHours' => null,
+            'workedHours' => 0.0,
+            'totalLoggedHours' => 0.0,
+            'estimateHours' => null,
+            'startDate' => null,
+            'dueDate' => null,
+            'isDone' => false,
+        ])->and($activeRows->pluck('taskId'))
+        ->not->toContain($closedTask->id);
+});
+
+it('keeps a historical weekly plan visible after its task is closed and archived', function () {
+    $user = deliverablesBoardViewer();
+    $owner = Person::factory()->create();
+    $project = Project::factory()->create([
+        'contract_type' => ProjectBoardTemplate::Deliverables,
+        'board_config' => [
+            'annex_modules' => ['historical-plan-task' => 'Historical delivery'],
+            'excluded_task_ids' => [],
+        ],
+    ]);
+    $task = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_task_id' => 'historical-plan-task',
+        'name' => 'Delivered task with an approved plan',
+        'status' => 'closed',
+        'active' => false,
+        'estimate_seconds' => 8 * 3600,
+    ]);
+    persistDeliverablesPlan($user, $project, $task, $owner, '2026-07-06', 8);
+
+    $response = $this->actingAs($user)->get(route('pm_board.index', [
+        'project' => $project->id,
+        'period' => 'week',
+        'anchor' => '2026-07-08',
+    ]));
+
+    $weeklyRow = collect($response->inertiaProps('annexBoard.weeklyRows'))
+        ->firstWhere('taskId', $task->id);
+
+    expect($weeklyRow)->toMatchArray([
+        'plannedHours' => 8.0,
+        'workedHours' => 0.0,
+        'status' => 'closed',
+        'isDone' => true,
+    ])->and(collect($response->inertiaProps('annexBoard.activeRows')))
+        ->toBeEmpty();
 });
 
 it('separates configured deliverable estimates from operational consumption without double counting', function () {

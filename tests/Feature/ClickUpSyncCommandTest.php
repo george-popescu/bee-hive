@@ -4,6 +4,7 @@ use App\Contracts\ClickUpClient;
 use App\Jobs\SyncClickUpWorkspace;
 use App\Models\SyncRun;
 use Carbon\CarbonImmutable;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -87,4 +88,13 @@ it('defines unique queue behavior and overlap protection', function () {
         ->and($middleware[0]->key)->toBe('clickup-workspace-sync-job')
         ->and($middleware[0]->releaseAfter)->toBe(60)
         ->and($middleware[0]->expiresAfter)->toBe(1_800);
+});
+
+it('schedules the automatic ClickUp synchronization every day at 10:25 Bucharest time', function () {
+    $event = collect(app(Schedule::class)->events())
+        ->first(fn ($event): bool => $event->description === SyncClickUpWorkspace::class);
+
+    expect($event)->not->toBeNull()
+        ->and($event->expression)->toBe('25 10 * * *')
+        ->and($event->timezone)->toBe('Europe/Bucharest');
 });

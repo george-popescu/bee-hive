@@ -1,5 +1,8 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
+import { ActiveTaskTable } from '@/components/pm-board/active-task-table';
+import type { ActiveTaskTableRow } from '@/components/pm-board/active-task-table';
+import { PeriodNavigation } from '@/components/pm-board/period-navigation';
 import type {
     Period,
     ProjectSelectorProject,
@@ -74,6 +77,7 @@ type AnnexValidationViewProps = {
     period: Period;
     totals: ValidationTotals;
     validation: AnnexValidationData;
+    activeTasks: ActiveTaskTableRow[];
     sync: {
         startedAt: string | null;
         finishedAt: string | null;
@@ -237,6 +241,7 @@ export function AnnexValidationView({
     period,
     totals,
     validation,
+    activeTasks,
     sync,
 }: AnnexValidationViewProps) {
     const { languageTag, t } = useTranslations();
@@ -260,29 +265,34 @@ export function AnnexValidationView({
             deliverable.startDate === null || deliverable.dueDate === null,
     );
     const syncDate = sync?.finishedAt ?? sync?.startedAt;
-    const navigate = (projectId: number) => {
+    const navigate = (
+        projectId: number,
+        periodType = period.type,
+        anchor = period.anchor,
+        preserveState = false,
+    ) => {
         router.visit(
             pmBoardIndex({
                 query: {
                     project: projectId,
-                    period: period.type,
-                    anchor: period.anchor,
+                    period: periodType,
+                    anchor,
                     ...(selectedPmId === null ? {} : { pm: selectedPmId }),
                 },
             }),
-            { preserveScroll: true },
+            { preserveScroll: true, preserveState },
         );
     };
 
     return (
         <main
-            className="flex min-h-full min-w-0 flex-1 overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8"
+            className="flex min-w-0 flex-1 overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8"
             style={{
                 fontFamily:
                     '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
             }}
         >
-            <div className="@container mx-auto grid w-full max-w-[980px] content-start gap-5 text-[14px] leading-[21px]">
+            <div className="@container grid w-full content-start gap-5 text-[14px] leading-[21px]">
                 <header className="flex flex-wrap items-start justify-between gap-4">
                     <div className="grid gap-1">
                         <p className="text-xs text-muted-foreground">
@@ -338,6 +348,59 @@ export function AnnexValidationView({
                                 </SelectContent>
                             </Select>
                         </label>
+                        <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2">
+                            <div
+                                className="inline-flex h-7 overflow-hidden rounded-[10px] border"
+                                role="group"
+                                aria-label={t('Period view')}
+                            >
+                                {(['week', 'month'] as const).map((mode) => (
+                                    <button
+                                        key={mode}
+                                        type="button"
+                                        aria-pressed={period.type === mode}
+                                        className={cn(
+                                            'h-full px-2 transition-colors',
+                                            mode === 'month' && 'border-l',
+                                            period.type === mode
+                                                ? 'bg-foreground text-background'
+                                                : 'bg-background hover:bg-muted',
+                                        )}
+                                        onClick={() =>
+                                            navigate(
+                                                selectedProject.id,
+                                                mode,
+                                                period.anchor,
+                                                true,
+                                            )
+                                        }
+                                    >
+                                        {mode === 'week'
+                                            ? t('Week')
+                                            : t('Month')}
+                                    </button>
+                                ))}
+                            </div>
+                            <PeriodNavigation
+                                label={period.label}
+                                onPrevious={() =>
+                                    navigate(
+                                        selectedProject.id,
+                                        period.type,
+                                        period.previousAnchor,
+                                        true,
+                                    )
+                                }
+                                onNext={() =>
+                                    navigate(
+                                        selectedProject.id,
+                                        period.type,
+                                        period.nextAnchor,
+                                        true,
+                                    )
+                                }
+                            />
+                        </div>
                         <div
                             className="flex flex-wrap gap-1"
                             role="tablist"
@@ -815,6 +878,8 @@ export function AnnexValidationView({
                         </div>
                     </section>
                 )}
+
+                <ActiveTaskTable rows={activeTasks} />
 
                 <footer className="pt-1 text-xs text-muted-foreground">
                     {t(

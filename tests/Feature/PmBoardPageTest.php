@@ -3,11 +3,13 @@
 use App\Enums\ClickUpLocationKind;
 use App\Enums\PermissionName;
 use App\Enums\ProjectBoardTemplate;
+use App\Enums\SyncRunStatus;
 use App\Models\ClickUpFolder;
 use App\Models\ClickUpList;
 use App\Models\ClickUpTask;
 use App\Models\Person;
 use App\Models\Project;
+use App\Models\SyncRun;
 use App\Models\TimeEntry;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -40,6 +42,27 @@ it('redirects guests and forbids users without board permission', function () {
     $this->actingAs(User::factory()->create())
         ->get(route('pm_board.index'))
         ->assertForbidden();
+});
+
+it('provides the latest ClickUp synchronization for the PM board header', function () {
+    $user = globalPmBoardViewer();
+    $user->givePermissionTo(PermissionName::SyncClickUp->value);
+    $project = Project::factory()->create();
+    SyncRun::factory()->create([
+        'status' => SyncRunStatus::Succeeded,
+        'started_at' => '2026-07-15 10:25:00',
+        'finished_at' => '2026-07-15 10:27:00',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('pm_board.index', ['project' => $project->id]))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('pm-board/index', false)
+            ->where('sync.status', SyncRunStatus::Succeeded->value)
+            ->where('sync.startedAt', '2026-07-15T10:25:00+03:00')
+            ->where('sync.finishedAt', '2026-07-15T10:27:00+03:00')
+            ->where('permissions.syncClickUp', true));
 });
 
 it('gives management global project access and filters projects by manager', function () {
@@ -235,6 +258,7 @@ it('keeps the requested month view for a deliverables project', function () {
             ->where('selectedProject.id', $project->id)
             ->where('selectedProject.template', ProjectBoardTemplate::Deliverables->value)
             ->has('annexBoard.annexes')
+            ->has('annexBoard.activeRows', 0)
             ->where('period.type', 'month')
             ->where('period.start', '2026-07-01')
             ->where('period.end', '2026-07-31'));

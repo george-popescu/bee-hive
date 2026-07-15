@@ -131,6 +131,30 @@ class PmBoardData
             ->select('click_up_task_id')
             ->whereNotNull('click_up_task_id')
             ->whereBetween('started_at', [$rangeStart->utc(), $rangeEnd->utc()]);
+        $isDeliverables = $selectedProject instanceof Project
+            && $selectedProject->contract_type === ProjectBoardTemplate::Deliverables;
+        $excludedTaskIds = $selectedProjects
+            ->filter(fn (Project $project): bool => $project->contract_type === ProjectBoardTemplate::Deliverables)
+            ->flatMap(fn (Project $project): array => $this->excludedTaskIds($project))
+            ->all();
+        $currentPlanTaskIds = collect();
+
+        if ($isDeliverables && $period === 'week') {
+            $currentPlanQuery = WeeklyPlan::query()
+                ->whereBelongsTo($selectedProject)
+                ->whereDate('week_start', $rangeStart->startOfWeek())
+                ->where('selected', true);
+
+            if ($excludedTaskIds !== []) {
+                $currentPlanQuery->whereHas(
+                    'task',
+                    fn ($query) => $query->whereNotIn('clickup_task_id', $excludedTaskIds),
+                );
+            }
+
+            $currentPlanTaskIds = $currentPlanQuery->pluck('click_up_task_id');
+        }
+
         $selectedProjectKeys = $selectedProjects->modelKeys();
         $tasks = ClickUpTask::query()
             ->select([
@@ -159,9 +183,15 @@ class PmBoardData
                     $query->orWhereIn('clickup_list_id', $internalListIds);
                 }
             })
-            ->where(fn ($query) => $query
-                ->where('active', true)
-                ->orWhereIn('id', $taskIdsWithEntries))
+            ->where(function ($query) use ($currentPlanTaskIds, $taskIdsWithEntries): void {
+                $query
+                    ->where('active', true)
+                    ->orWhereIn('id', $taskIdsWithEntries);
+
+                if ($currentPlanTaskIds->isNotEmpty()) {
+                    $query->orWhereIn('id', $currentPlanTaskIds);
+                }
+            })
             ->with([
                 'assignees:id,name',
                 'clickUpList:id,clickup_list_id,name',
@@ -191,10 +221,6 @@ class PmBoardData
             ->filter(fn (array $task): bool => $task['periodHours'] > 0)
             ->sortByDesc('periodHours')
             ->values();
-        $excludedTaskIds = $selectedProjects
-            ->filter(fn (Project $project): bool => $project->contract_type === ProjectBoardTemplate::Deliverables)
-            ->flatMap(fn (Project $project): array => $this->excludedTaskIds($project))
-            ->all();
         $upcomingTasks = $taskRows
             ->filter(fn (array $task): bool => $task['active'] && ! $task['isDone'])
             ->sortBy(fn (array $task): string => $task['statusGroup'].'|'.($task['dueDate'] ?? '9999-12-31').'|'.$task['name'])
@@ -213,8 +239,6 @@ class PmBoardData
             rangeStart: $rangeStart,
             rangeEnd: $rangeEnd,
         );
-        $isDeliverables = $selectedProject instanceof Project
-            && $selectedProject->contract_type === ProjectBoardTemplate::Deliverables;
         $planning = $isDeliverables
             ? $this->planningData($selectedProject, $upcomingTasks, $rangeEnd->addDay()->startOfDay())
             : null;
@@ -746,12 +770,14 @@ class PmBoardData
                 'row' => $taskData->get($task->getKey(), []),
             ];
         });
+        $allScopedTasks = $scopedTasks;
         $currentPlans = $period === 'week'
-            ? $this->selectedPlanHours($project, $upcomingTasks, $rangeStart->startOfWeek())
+            ? $this->selectedPlanHours($project, $rangeStart->startOfWeek())
             : collect();
         $nextPlans = collect(is_array($planning['plans'] ?? null) ? $planning['plans'] : [])
             ->filter(fn (mixed $plan): bool => is_array($plan) && ($plan['selected'] ?? false) === true)
             ->keyBy('taskId');
+        $activeTaskIds = $upcomingTasks->pluck('id');
         $plannedTaskIds = $period === 'week'
             ? $currentPlans->keys()->merge($nextPlans->keys())
             : collect();
@@ -763,16 +789,19 @@ class PmBoardData
                 }
 
                 return $annexTasks->contains(function (array $scopedTask) use ($plannedTaskIds): bool {
+                    $taskId = $scopedTask['task']->getKey();
                     $row = $scopedTask['row'];
+
+                    if ($plannedTaskIds->contains($taskId) || (float) ($row['periodHours'] ?? 0) > 0) {
+                        return true;
+                    }
 
                     if (($row['active'] ?? false) !== true || ($row['isDone'] ?? false) === true) {
                         return false;
                     }
 
-                    return $plannedTaskIds->contains($scopedTask['task']->getKey())
-                        || ($row['estimateHours'] ?? null) !== null
+                    return ($row['estimateHours'] ?? null) !== null
                         || (float) ($row['totalLoggedHours'] ?? 0) > 0
-                        || (float) ($row['periodHours'] ?? 0) > 0
                         || ($row['startDate'] ?? null) !== null
                         || ($row['dueDate'] ?? null) !== null;
                 });
@@ -827,6 +856,17 @@ class PmBoardData
             })
             ->sortBy(fn (array $row): string => ($row['dueDate'] ?? '9999-12-31').'|'.$row['annexLabel'].'|'.$row['name'])
             ->values();
+        $activeRows = $allScopedTasks
+            ->filter(fn (array $scopedTask): bool => $activeTaskIds->contains($scopedTask['task']->getKey()))
+            ->sortBy(fn (array $scopedTask): string => ($scopedTask['row']['statusGroup'] ?? '0-active')
+                .'|'.($scopedTask['row']['dueDate'] ?? '9999-12-31')
+                .'|'.$scopedTask['annexLabel']
+                .'|'.$scopedTask['row']['name'])
+            ->map(fn (array $scopedTask): array => $this->annexTaskRow(
+                scopedTask: $scopedTask,
+                plannedHours: null,
+            ))
+            ->values();
         $timelineRows = $annexes->map(fn (array $annex): array => [
             'annexKey' => $annex['key'],
             'label' => $annex['label'],
@@ -853,6 +893,7 @@ class PmBoardData
             'annexes' => $annexes->all(),
             'weeklyRows' => $weeklyRows->all(),
             'agreedRows' => $agreedRows->all(),
+            'activeRows' => $activeRows->all(),
             'timeline' => [
                 'start' => $knownStartDates->isEmpty() ? null : $knownStartDates->min(),
                 'end' => $knownDueDates->isEmpty() ? null : $knownDueDates->max(),
@@ -1079,8 +1120,10 @@ class PmBoardData
             'owners' => array_values(is_array($row['owners'] ?? null) ? $row['owners'] : []),
             'plannedHours' => $plannedHours === null ? null : round($plannedHours, 2),
             'workedHours' => round($workedHours, 2),
+            'totalLoggedHours' => round((float) ($row['totalLoggedHours'] ?? 0), 2),
             'estimateHours' => $row['estimateHours'] ?? null,
             'remainingEstimateHours' => $row['remainingHours'] ?? null,
+            'progress' => $row['progress'] ?? null,
             'startDate' => $row['startDate'] ?? null,
             'dueDate' => $row['dueDate'] ?? null,
             'status' => (string) ($row['status'] ?? __('messages.common.no_status')),
@@ -1095,17 +1138,23 @@ class PmBoardData
         ];
     }
 
-    /**
-     * @param  Collection<int, covariant array<string, mixed>>  $upcomingTasks
-     * @return Collection<int<0, max>, float>
-     */
-    private function selectedPlanHours(Project $project, Collection $upcomingTasks, CarbonImmutable $weekStart): Collection
+    /** @return Collection<int<0, max>, float> */
+    private function selectedPlanHours(Project $project, CarbonImmutable $weekStart): Collection
     {
-        return WeeklyPlan::query()
+        $plans = WeeklyPlan::query()
             ->whereBelongsTo($project)
             ->whereDate('week_start', $weekStart)
-            ->where('selected', true)
-            ->whereIn('click_up_task_id', $upcomingTasks->pluck('id')->all())
+            ->where('selected', true);
+        $excludedTaskIds = $this->excludedTaskIds($project);
+
+        if ($excludedTaskIds !== []) {
+            $plans->whereHas(
+                'task',
+                fn ($query) => $query->whereNotIn('clickup_task_id', $excludedTaskIds),
+            );
+        }
+
+        return $plans
             ->with(['allocations:id,weekly_plan_id,hours'])
             ->get()
             ->mapWithKeys(fn (WeeklyPlan $plan): array => [

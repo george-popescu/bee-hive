@@ -1,7 +1,10 @@
 import { router } from '@inertiajs/react';
 import { Fragment, useState } from 'react';
+import { ActiveTaskTable } from '@/components/pm-board/active-task-table';
+import type { ActiveTaskTableRow } from '@/components/pm-board/active-task-table';
 import { AnnexValidationView } from '@/components/pm-board/annex-validation-view';
 import type { AnnexValidationData } from '@/components/pm-board/annex-validation-view';
+import { PeriodNavigation } from '@/components/pm-board/period-navigation';
 import type {
     Period,
     ProjectSelectorProject,
@@ -51,8 +54,10 @@ type AnnexTaskRow = {
     owners: string[];
     plannedHours: number | null;
     workedHours: number;
+    totalLoggedHours: number;
     estimateHours: number | null;
     remainingEstimateHours: number | null;
+    progress: number | null;
     startDate: string | null;
     dueDate: string | null;
     status: string;
@@ -75,6 +80,7 @@ export type AnnexBoardData = {
     annexes: Annex[];
     weeklyRows: AnnexTaskRow[];
     agreedRows: AnnexTaskRow[];
+    activeRows: AnnexTaskRow[];
     timeline: {
         start: string | null;
         end: string | null;
@@ -227,6 +233,23 @@ function annexBarClass(annex: Annex | TimelineRow): string {
     return 'bg-chart-1';
 }
 
+function activeTaskTableRow(row: AnnexTaskRow): ActiveTaskTableRow {
+    return {
+        id: row.taskId,
+        contextLabel: row.annexLabel,
+        name: row.name,
+        url: row.url,
+        status: row.status,
+        owners: row.owners,
+        estimateHours: row.estimateHours,
+        periodHours: row.workedHours,
+        totalLoggedHours: row.totalLoggedHours,
+        remainingHours: row.remainingEstimateHours,
+        progress: row.progress,
+        dueDate: row.dueDate,
+    };
+}
+
 export function AnnexBoardView({
     projects,
     selectedPmId,
@@ -238,6 +261,7 @@ export function AnnexBoardView({
 }: AnnexBoardViewProps) {
     const { languageTag, t } = useTranslations();
     const [annexFilter, setAnnexFilter] = useState('all');
+    const activeTasks = annexBoard.activeRows.map(activeTaskTableRow);
 
     if (annexBoard.validation.enabled) {
         return (
@@ -248,6 +272,7 @@ export function AnnexBoardView({
                 period={period}
                 totals={annexBoard.totals}
                 validation={annexBoard.validation}
+                activeTasks={activeTasks}
                 sync={sync}
             />
         );
@@ -262,6 +287,9 @@ export function AnnexBoardView({
     const filteredAgreedRows = annexBoard.agreedRows.filter(
         (row) => annexFilter === 'all' || row.annexKey === annexFilter,
     );
+    const filteredActiveTasks = annexBoard.activeRows
+        .filter((row) => annexFilter === 'all' || row.annexKey === annexFilter)
+        .map(activeTaskTableRow);
     const filteredTimelineRows = annexBoard.timeline.rows.filter(
         (row) => annexFilter === 'all' || row.annexKey === annexFilter,
     );
@@ -288,13 +316,17 @@ export function AnnexBoardView({
     const showToday =
         todayDate.getTime() >= timeline.start.getTime() &&
         todayDate.getTime() <= timeline.end.getTime();
-    const navigate = (projectId: number, periodType = period.type) => {
+    const navigate = (
+        projectId: number,
+        periodType = period.type,
+        anchor = period.anchor,
+    ) => {
         router.visit(
             pmBoardIndex({
                 query: {
                     project: projectId,
                     period: periodType,
-                    anchor: period.anchor,
+                    anchor,
                     ...(selectedPmId === null ? {} : { pm: selectedPmId }),
                 },
             }),
@@ -304,14 +336,14 @@ export function AnnexBoardView({
 
     return (
         <main
-            className="flex min-h-full min-w-0 flex-1 overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8"
+            className="flex min-w-0 flex-1 overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8"
             style={{
                 fontFamily:
                     '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
             }}
         >
-            <div className="@container mx-auto grid w-full max-w-[736px] content-start gap-6 text-[14px] leading-[21px]">
-                <header className="flex flex-wrap items-end justify-between gap-4">
+            <div className="@container grid w-full content-start gap-6 text-[14px] leading-[21px]">
+                <header className="flex flex-wrap items-start justify-between gap-4">
                     <div className="grid min-w-0 gap-1">
                         <span className="text-xs text-muted-foreground">
                             {selectedProject.label} · {t('PM / TTL review')} ·{' '}
@@ -418,6 +450,23 @@ export function AnnexBoardView({
                                 </Select>
                             </label>
                         </div>
+                        <PeriodNavigation
+                            label={formatPeriod(period, languageTag)}
+                            onPrevious={() =>
+                                navigate(
+                                    selectedProject.id,
+                                    period.type,
+                                    period.previousAnchor,
+                                )
+                            }
+                            onNext={() =>
+                                navigate(
+                                    selectedProject.id,
+                                    period.type,
+                                    period.nextAnchor,
+                                )
+                            }
+                        />
                     </div>
                 </header>
 
@@ -821,6 +870,8 @@ export function AnnexBoardView({
                         </table>
                     </div>
                 </section>
+
+                <ActiveTaskTable rows={filteredActiveTasks} />
 
                 {period.type === 'month' && (
                     <section

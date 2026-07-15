@@ -10,7 +10,8 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::job(new SyncClickUpWorkspace)
-    ->hourly()
+    ->dailyAt('10:25')
+    ->timezone(config('app.timezone'))
     ->withoutOverlapping(30)
     ->onOneServer();
 

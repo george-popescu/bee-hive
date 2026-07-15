@@ -1,5 +1,7 @@
 import { router } from '@inertiajs/react';
 import { Fragment } from 'react';
+import { ActiveTaskTable } from '@/components/pm-board/active-task-table';
+import { PeriodNavigation } from '@/components/pm-board/period-navigation';
 import {
     Select,
     SelectContent,
@@ -286,13 +288,17 @@ export function ProjectSelectorView({
     const todayPosition = timeline
         ? positionInTimeline(parseDate(today), timeline)
         : null;
-    const navigate = (projectId: number, periodType = period.type) => {
+    const navigate = (
+        projectId: number,
+        periodType = period.type,
+        anchor = period.anchor,
+    ) => {
         router.visit(
             pmBoardIndex({
                 query: {
                     project: projectId,
                     period: periodType,
-                    anchor: period.anchor,
+                    anchor,
                     ...(selectedPmId === null ? {} : { pm: selectedPmId }),
                 },
             }),
@@ -302,13 +308,13 @@ export function ProjectSelectorView({
 
     return (
         <main
-            className="flex min-h-full min-w-0 flex-1 overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8"
+            className="flex min-w-0 flex-1 overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8"
             style={{
                 fontFamily:
                     '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
             }}
         >
-            <div className="@container mx-auto grid w-full max-w-[736px] content-start gap-6 text-[14px] leading-[21px]">
+            <div className="@container grid w-full content-start gap-6 text-[14px] leading-[21px]">
                 <header className="flex flex-wrap items-end justify-between gap-4">
                     <div className="grid min-w-0 gap-1">
                         <span className="text-xs text-muted-foreground">
@@ -385,6 +391,26 @@ export function ProjectSelectorView({
                                 </SelectContent>
                             </Select>
                         </label>
+
+                        {selectedProject && (
+                            <PeriodNavigation
+                                label={formatPeriod(period, languageTag)}
+                                onPrevious={() =>
+                                    navigate(
+                                        selectedProject.id,
+                                        period.type,
+                                        period.previousAnchor,
+                                    )
+                                }
+                                onNext={() =>
+                                    navigate(
+                                        selectedProject.id,
+                                        period.type,
+                                        period.nextAnchor,
+                                    )
+                                }
+                            />
+                        )}
                     </div>
                 </header>
 
@@ -755,6 +781,8 @@ export function ProjectSelectorView({
                                 </table>
                             </div>
                         </section>
+
+                        <ActiveTaskTable rows={upcomingTasks} />
                     </>
                 )}
             </div>
