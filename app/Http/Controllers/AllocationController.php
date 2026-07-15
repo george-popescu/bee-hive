@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\DeleteAllocationRequest;
+use App\Http\Requests\ReplacePersonMonthAllocationsRequest;
 use App\Http\Requests\UpdateAllocationRequest;
 use App\Http\Requests\UpsertAllocationRequest;
 use App\Models\Allocation;
@@ -11,6 +12,7 @@ use App\Models\Project;
 use App\Services\Capacity\AllocationPlanService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 
 class AllocationController extends Controller
 {
@@ -56,6 +58,28 @@ class AllocationController extends Controller
 
         return response()->json([
             'allocation' => $this->allocationData($allocation),
+        ]);
+    }
+
+    public function replacePersonMonth(ReplacePersonMonthAllocationsRequest $request): JsonResponse|RedirectResponse
+    {
+        $data = $request->validated();
+        $allocations = $this->allocations->replacePersonMonth(
+            user: $request->user(),
+            person: Person::query()->whereKey((int) $data['person_id'])->firstOrFail(),
+            month: $data['month'],
+            rows: $data['allocations'],
+        );
+
+        if ($request->header('X-Inertia') !== null) {
+            return back();
+        }
+
+        return response()->json([
+            'allocations' => $allocations
+                ->map(fn (Allocation $allocation): array => $this->allocationData($allocation))
+                ->values()
+                ->all(),
         ]);
     }
 

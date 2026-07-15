@@ -1,6 +1,10 @@
 import { Head, setLayoutProps, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import type {
+    AllocationEntry,
+    AllocationHistoryRecord,
+} from '@/components/team-planning/allocation-editor';
+import type {
     MonthlyCapacityRow,
     PlanningMonth,
 } from '@/components/team-planning/monthly-capacity';
@@ -18,6 +22,7 @@ type Team = {
 type Project = {
     id: number;
     label: string;
+    active: boolean;
 };
 
 type Props = {
@@ -27,6 +32,11 @@ type Props = {
     roles: string[];
     capacityRows: MonthlyCapacityRow[];
     weekly: WeeklyPlanning;
+    allocationEntries: AllocationEntry[];
+    allocationHistory: AllocationHistoryRecord[];
+    permissions: {
+        manageAllocations: boolean;
+    };
 };
 
 export default function TeamLeadPlan({
@@ -36,6 +46,9 @@ export default function TeamLeadPlan({
     roles,
     capacityRows,
     weekly,
+    allocationEntries,
+    allocationHistory,
+    permissions,
 }: Props) {
     const { t } = useTranslations();
     const pageUrl = usePage().url;
@@ -69,6 +82,10 @@ export default function TeamLeadPlan({
                     <MonthlyCapacityView
                         months={months}
                         rows={capacityRows}
+                        projects={projects}
+                        allocationEntries={allocationEntries}
+                        allocationHistory={allocationHistory}
+                        canManageAllocations={permissions.manageAllocations}
                         initialPersonId={
                             hasRequestedPerson ? requestedPersonId : undefined
                         }

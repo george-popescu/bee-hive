@@ -3,6 +3,7 @@
 use App\Enums\PermissionName;
 use App\Models\ActualAdjustment;
 use App\Models\Allocation;
+use App\Models\AuditLog;
 use App\Models\Person;
 use App\Models\Project;
 use App\Models\Team;
@@ -303,6 +304,97 @@ it('uses saved weekly distribution before the monthly proration fallback', funct
             ->where('weekly.rows.0.allocations.0.source', 'weekly')
             ->where('allocationEntries.0.weeklyHours.1.hours', 16)
             ->where('allocationEntries.0.planningComment', 'Prioritate pentru lansare.'));
+});
+
+it('returns editable allocation context and scoped create update delete history', function () {
+    $user = User::factory()->create(['name' => 'Ionuț PM']);
+    $user->givePermissionTo(PermissionName::ViewTeamLead->value, PermissionName::ManageAllocations->value);
+    $lead = Person::factory()->create(['user_id' => $user]);
+    $visiblePerson = Person::factory()->create(['name' => 'Ana Vizibilă']);
+    $hiddenPerson = Person::factory()->create(['name' => 'Bogdan Ascuns']);
+    $team = Team::factory()->create();
+    $team->people()->attach($lead, ['is_lead' => true]);
+    $team->people()->attach($visiblePerson);
+    $project = Project::factory()->create(['client' => 'Acme', 'name' => 'Portal']);
+    $visibleAllocation = Allocation::factory()->create([
+        'person_id' => $visiblePerson,
+        'project_id' => $project,
+        'role' => 'BE Dev',
+        'month' => '2026-07-01',
+        'planned_hours' => 24,
+        'weekly_hours' => [
+            ['week_start' => '2026-07-06', 'hours' => 8],
+            ['week_start' => '2026-07-13', 'hours' => 16],
+        ],
+        'updated_by' => $user,
+    ]);
+    $hiddenAllocation = Allocation::factory()->create([
+        'person_id' => $hiddenPerson,
+        'project_id' => $project,
+        'month' => '2026-07-01',
+    ]);
+
+    foreach (['allocation.upserted', 'allocation.updated'] as $action) {
+        AuditLog::factory()->create([
+            'user_id' => $user,
+            'actor_name' => $user->name,
+            'action' => $action,
+            'auditable_type' => Allocation::class,
+            'auditable_id' => $visibleAllocation->id,
+            'before' => ['person_id' => $visiblePerson->id, 'month' => '2026-07-01'],
+            'after' => ['person_id' => $visiblePerson->id, 'month' => '2026-07-01'],
+        ]);
+    }
+
+    AuditLog::factory()->create([
+        'user_id' => $user,
+        'actor_name' => $user->name,
+        'action' => 'allocation.deleted',
+        'auditable_type' => Allocation::class,
+        'auditable_id' => 999999,
+        'before' => [
+            'person_id' => $visiblePerson->id,
+            'project_id' => $project->id,
+            'role' => 'QA',
+            'month' => '2026-07-01',
+        ],
+        'after' => [],
+    ]);
+    AuditLog::factory()->create([
+        'action' => 'allocation.updated',
+        'auditable_type' => Allocation::class,
+        'auditable_id' => $hiddenAllocation->id,
+        'before' => ['person_id' => $hiddenPerson->id, 'month' => '2026-07-01'],
+        'after' => ['person_id' => $hiddenPerson->id, 'month' => '2026-07-01'],
+    ]);
+
+    $props = $this->actingAs($user)
+        ->get(route('team_lead.index'))
+        ->assertSuccessful()
+        ->inertiaProps();
+    $history = collect($props['allocationHistory']);
+
+    expect($props['allocationEntries'])->toHaveCount(1)
+        ->and($props['allocationEntries'][0])->toMatchArray([
+            'personId' => $visiblePerson->id,
+            'projectId' => $project->id,
+            'month' => '2026-07',
+            'hours' => 24,
+            'weeklyHours' => [
+                ['weekStart' => '2026-07-06', 'hours' => 8],
+                ['weekStart' => '2026-07-13', 'hours' => 16],
+            ],
+            'updatedBy' => 'Ionuț PM',
+        ])
+        ->and($props['allocationEntries'][0]['updatedAt'])->not->toBeNull()
+        ->and($history)->toHaveCount(3)
+        ->and($history->pluck('action')->sort()->values()->all())->toBe([
+            'allocation.deleted',
+            'allocation.updated',
+            'allocation.upserted',
+        ])
+        ->and($history->every(fn (array $entry): bool => $entry['personId'] === $visiblePerson->id))->toBeTrue()
+        ->and($history->firstWhere('action', 'allocation.deleted')['month'])->toBe('2026-07');
 });
 
 it('does not report people with no available capacity as unallocated', function () {

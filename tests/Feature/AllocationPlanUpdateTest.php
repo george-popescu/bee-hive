@@ -261,3 +261,118 @@ it('deletes only scoped allocations and keeps an audit record', function () {
 
     expect($outside->fresh())->not->toBeNull();
 });
+
+it('reconciles a person month atomically with create update delete and audit records', function () {
+    [$user, $person, $project] = allocationEditor();
+    $projectToRemove = Project::factory()->create();
+    $replacementProject = Project::factory()->create();
+    $allocationToUpdate = Allocation::factory()->create([
+        'person_id' => $person,
+        'project_id' => $project,
+        'role' => 'BE Dev',
+        'month' => '2026-07-01',
+        'planned_hours' => 8,
+    ]);
+    $allocationToRemove = Allocation::factory()->create([
+        'person_id' => $person,
+        'project_id' => $projectToRemove,
+        'role' => 'QA',
+        'month' => '2026-07-01',
+        'planned_hours' => 4,
+    ]);
+
+    $this->actingAs($user)->putJson(route('allocations.replace_person_month'), [
+        'person_id' => $person->id,
+        'month' => '2026-07',
+        'allocations' => [
+            [
+                'id' => $allocationToUpdate->id,
+                'project_id' => $replacementProject->id,
+                'role' => 'BE Dev',
+                'planned_hours' => 16,
+                'weekly_hours' => [
+                    ['week_start' => '2026-06-29', 'hours' => 4],
+                    ['week_start' => '2026-07-06', 'hours' => 12],
+                ],
+                'planning_comment' => 'Mutat pe proiectul aprobat.',
+            ],
+            [
+                'project_id' => $projectToRemove->id,
+                'role' => 'QA',
+                'planned_hours' => 8,
+                'weekly_hours' => [
+                    ['week_start' => '2026-07-13', 'hours' => 8],
+                ],
+            ],
+        ],
+    ])->assertSuccessful()
+        ->assertJsonCount(2, 'allocations')
+        ->assertJsonPath('allocations.0.planned_hours', 16)
+        ->assertJsonPath('allocations.0.planning_comment', 'Mutat pe proiectul aprobat.');
+
+    expect($allocationToUpdate->refresh()->project_id)->toBe($replacementProject->id)
+        ->and($allocationToUpdate->planned_hours)->toBe('16.00')
+        ->and($allocationToRemove->fresh())->toBeNull()
+        ->and(Allocation::query()
+            ->whereBelongsTo($person)
+            ->whereDate('month', '2026-07-01')
+            ->count())->toBe(2)
+        ->and(AuditLog::query()->where('action', 'allocation.updated')->count())->toBe(1)
+        ->and(AuditLog::query()->where('action', 'allocation.deleted')->count())->toBe(1)
+        ->and(AuditLog::query()->where('action', 'allocation.upserted')->count())->toBe(1);
+});
+
+it('rolls back the person month draft when one allocation is invalid', function () {
+    [$user, $person, $project] = allocationEditor();
+    $allocation = Allocation::factory()->create([
+        'person_id' => $person,
+        'project_id' => $project,
+        'role' => 'BE Dev',
+        'month' => '2026-07-01',
+        'planned_hours' => 8,
+    ]);
+
+    $this->actingAs($user)->putJson(route('allocations.replace_person_month'), [
+        'person_id' => $person->id,
+        'month' => '2026-07',
+        'allocations' => [
+            [
+                'id' => $allocation->id,
+                'project_id' => $project->id,
+                'role' => 'BE Dev',
+                'planned_hours' => 8.1,
+                'weekly_hours' => [
+                    ['week_start' => '2026-07-06', 'hours' => 8.1],
+                ],
+            ],
+        ],
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors(['allocations.0.weekly_hours.0.hours']);
+
+    expect($allocation->refresh()->planned_hours)->toBe('8.00')
+        ->and(AuditLog::query()->count())->toBe(0);
+});
+
+it('protects person month replacement by permission and team scope', function () {
+    [$user, $person, $project] = allocationEditor();
+    $payload = [
+        'person_id' => $person->id,
+        'month' => '2026-07',
+        'allocations' => [[
+            'project_id' => $project->id,
+            'role' => 'QA',
+            'planned_hours' => 8,
+            'weekly_hours' => [['week_start' => '2026-07-06', 'hours' => 8]],
+        ]],
+    ];
+
+    $this->actingAs(User::factory()->create())
+        ->putJson(route('allocations.replace_person_month'), $payload)
+        ->assertForbidden();
+
+    $this->actingAs($user)
+        ->putJson(route('allocations.replace_person_month'), [
+            ...$payload,
+            'person_id' => Person::factory()->create()->id,
+        ])->assertForbidden();
+});

@@ -151,7 +151,7 @@ final class TeamLeadPlanData
                 'updatedBy' => $allocation->updater?->name,
                 'updatedAt' => $allocation->updated_at?->toIso8601String(),
             ])->values()->all(),
-            'allocationHistory' => $this->allocationHistory($allocations),
+            'allocationHistory' => $this->allocationHistory($people->keys()),
             'adjustments' => $adjustmentRows,
             'permissions' => [
                 'manageAllocations' => $user->can(PermissionName::ManageAllocations->value),
@@ -371,33 +371,54 @@ final class TeamLeadPlanData
     }
 
     /**
-     * @param  Collection<int, Allocation>  $allocations
+     * @param  Collection<int, int|string>  $personIds
      * @return list<array<string, mixed>>
      */
-    private function allocationHistory(Collection $allocations): array
+    private function allocationHistory(Collection $personIds): array
     {
-        if ($allocations->isEmpty()) {
+        if ($personIds->isEmpty()) {
             return [];
         }
 
+        $scopedPersonIds = $personIds->map(fn (mixed $id): int => (int) $id)->values()->all();
+
         return array_values(AuditLog::query()
             ->where('auditable_type', Allocation::class)
-            ->whereIn('auditable_id', $allocations->pluck('id')->all())
-            ->whereIn('action', ['allocation.upserted', 'allocation.updated'])
+            ->whereIn('action', ['allocation.upserted', 'allocation.updated', 'allocation.deleted'])
+            ->where(function ($query) use ($scopedPersonIds): void {
+                $query
+                    ->whereIn('before->person_id', $scopedPersonIds)
+                    ->orWhereIn('after->person_id', $scopedPersonIds);
+            })
             ->latest('id')
             ->limit(30)
             ->get()
-            ->map(fn (AuditLog $log): array => [
-                'id' => (int) $log->getKey(),
-                'allocationId' => (int) $log->auditable_id,
-                'action' => $log->action,
-                'author' => is_string($log->actor_name) && $log->actor_name !== ''
-                    ? $log->actor_name
-                    : 'Unknown',
-                'before' => is_array($log->before) ? $log->before : null,
-                'after' => is_array($log->after) ? $log->after : null,
-                'createdAt' => $log->created_at?->toIso8601String(),
-            ])
+            ->map(function (AuditLog $log) use ($scopedPersonIds): array {
+                $before = is_array($log->before) ? $log->before : [];
+                $after = is_array($log->after) ? $log->after : [];
+                $afterPersonId = isset($after['person_id']) ? (int) $after['person_id'] : null;
+                $usesAfter = $afterPersonId !== null && in_array($afterPersonId, $scopedPersonIds, true);
+                $context = $usesAfter ? $after : $before;
+                $month = isset($context['month'])
+                    ? CarbonImmutable::parse((string) $context['month'])->format('Y-m')
+                    : null;
+
+                return [
+                    'id' => (int) $log->getKey(),
+                    'allocationId' => (int) $log->auditable_id,
+                    'personId' => isset($context['person_id']) ? (int) $context['person_id'] : null,
+                    'projectId' => isset($context['project_id']) ? (int) $context['project_id'] : null,
+                    'role' => isset($context['role']) ? (string) $context['role'] : '',
+                    'month' => $month,
+                    'action' => $log->action,
+                    'author' => is_string($log->actor_name) && $log->actor_name !== ''
+                        ? $log->actor_name
+                        : 'Unknown',
+                    'before' => $before,
+                    'after' => $after,
+                    'createdAt' => $log->created_at?->toIso8601String(),
+                ];
+            })
             ->all());
     }
 

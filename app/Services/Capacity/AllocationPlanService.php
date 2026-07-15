@@ -11,6 +11,7 @@ use App\Services\TeamLead\TeamLeadPlanData;
 use App\Services\TeamLead\TeamLeadScope;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -84,6 +85,100 @@ final class AllocationPlanService
             $before = $this->snapshot($allocation);
             $this->audit->log($user, $allocation, 'allocation.deleted', $before, []);
             $allocation->delete();
+        });
+    }
+
+    /**
+     * @param  list<array{id?: int|null, project_id: int, role?: string|null, planned_hours: float|int|string, weekly_hours: list<array{week_start: string, hours: float|int|string}>, planning_comment?: string|null}>  $rows
+     * @return Collection<int, Allocation>
+     */
+    public function replacePersonMonth(User $user, Person $person, string $month, array $rows): Collection
+    {
+        if (! in_array($person->getKey(), $this->scope->personIds($user), true)) {
+            throw new AuthorizationException('You cannot manage allocations for this person.');
+        }
+
+        if (! in_array($month, $this->planData->monthKeys(), true)) {
+            throw ValidationException::withMessages(['month' => 'The selected month is outside the active planning period.']);
+        }
+
+        $normalizedMonth = CarbonImmutable::parse($month)->startOfMonth()->toDateString();
+
+        return DB::transaction(function () use ($user, $person, $normalizedMonth, $rows): Collection {
+            $existing = Allocation::query()
+                ->whereBelongsTo($person)
+                ->whereDate('month', $normalizedMonth)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy(fn (Allocation $allocation): int => (int) $allocation->getKey());
+            $requestedIds = collect($rows)
+                ->pluck('id')
+                ->filter(fn (mixed $id): bool => $id !== null)
+                ->map(fn (mixed $id): int => (int) $id);
+
+            if ($requestedIds->diff($existing->keys())->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'allocations' => 'Every allocation must belong to the selected person and month.',
+                ]);
+            }
+
+            $beforeSnapshots = $existing->map(fn (Allocation $allocation): array => $this->snapshot($allocation));
+
+            foreach ($existing->except($requestedIds->all()) as $allocation) {
+                $before = $beforeSnapshots->get($allocation->getKey(), []);
+                $this->audit->log($user, $allocation, 'allocation.deleted', $before, []);
+                $allocation->delete();
+            }
+
+            foreach ($rows as $row) {
+                if (! isset($row['id'])) {
+                    continue;
+                }
+
+                $allocation = $existing->get((int) $row['id']);
+                $targetRole = trim((string) ($row['role'] ?? ''));
+
+                if ($allocation !== null
+                    && ($allocation->project_id !== (int) $row['project_id'] || $allocation->role !== $targetRole)) {
+                    $allocation->forceFill(['role' => '__hive_draft_'.$allocation->getKey()])->save();
+                }
+            }
+
+            $saved = collect();
+
+            foreach ($rows as $row) {
+                $allocation = isset($row['id'])
+                    ? $existing->get((int) $row['id'])
+                    : null;
+                $isNew = $allocation === null;
+                $allocation ??= new Allocation([
+                    'person_id' => $person->getKey(),
+                    'month' => $normalizedMonth,
+                    'created_by' => $user->getKey(),
+                ]);
+                $before = $isNew ? [] : $beforeSnapshots->get($allocation->getKey(), []);
+
+                $allocation->fill([
+                    'project_id' => (int) $row['project_id'],
+                    'role' => trim((string) ($row['role'] ?? '')),
+                    'planned_hours' => (float) $row['planned_hours'],
+                    'weekly_hours' => $this->normalizeWeeklyHours($row['weekly_hours']),
+                    'planning_comment' => $this->normalizeComment($row['planning_comment'] ?? null),
+                    'updated_by' => $user->getKey(),
+                ])->save();
+
+                $after = $this->snapshot($allocation);
+
+                if ($isNew) {
+                    $this->audit->log($user, $allocation, 'allocation.upserted', [], $after);
+                } elseif ($before !== $after) {
+                    $this->audit->log($user, $allocation, 'allocation.updated', $before, $after);
+                }
+
+                $saved->push($allocation->refresh());
+            }
+
+            return $saved;
         });
     }
 

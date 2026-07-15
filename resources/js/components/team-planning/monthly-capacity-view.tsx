@@ -1,5 +1,10 @@
 import { Minus, Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import type {
+    AllocationEntry,
+    AllocationHistoryRecord,
+} from '@/components/team-planning/allocation-editor';
+import { AllocationEditorView } from '@/components/team-planning/allocation-editor-view';
 import {
     addMonthlyColumn,
     filterMonthlyRows,
@@ -44,6 +49,14 @@ import { cn } from '@/lib/utils';
 type MonthlyCapacityViewProps = {
     months: PlanningMonth[];
     rows: MonthlyCapacityRow[];
+    projects: Array<{
+        id: number;
+        label: string;
+        active: boolean;
+    }>;
+    allocationEntries: AllocationEntry[];
+    allocationHistory: AllocationHistoryRecord[];
+    canManageAllocations: boolean;
     initialPersonId?: number;
     onShowWeekly: () => void;
 };
@@ -81,6 +94,10 @@ function signedHours(value: number, locale: string): string {
 export function MonthlyCapacityView({
     months,
     rows,
+    projects,
+    allocationEntries,
+    allocationHistory,
+    canManageAllocations,
     initialPersonId,
     onShowWeekly,
 }: MonthlyCapacityViewProps) {
@@ -136,6 +153,16 @@ export function MonthlyCapacityView({
     );
     const canAddMonth = visibleCount < availableMonthCount;
     const canRemoveMonth = visibleCount > Math.min(3, availableMonthCount);
+    const editorRevision = selection
+        ? allocationEntries
+              .filter(
+                  (entry) =>
+                      entry.personId === selection.personId &&
+                      entry.month === selection.month,
+              )
+              .map((entry) => `${entry.id}:${entry.updatedAt ?? ''}`)
+              .join('|')
+        : '';
 
     const removeLastMonth = () => {
         const nextCount = removeMonthlyColumn(
@@ -533,6 +560,22 @@ export function MonthlyCapacityView({
                     </Table>
                 </CardContent>
             </Card>
+
+            {selection && selectedRow && selectedValue && (
+                <AllocationEditorView
+                    key={`${selection.personId}:${selection.month}:${editorRevision}`}
+                    selection={selection}
+                    row={selectedRow}
+                    value={selectedValue}
+                    people={visibleRows}
+                    months={visibleMonths}
+                    projects={projects}
+                    entries={allocationEntries}
+                    history={allocationHistory}
+                    canManage={canManageAllocations}
+                    onSelect={setPreferredSelection}
+                />
+            )}
         </div>
     );
 }

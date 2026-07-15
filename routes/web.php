@@ -65,6 +65,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::put('allocations', [AllocationController::class, 'upsert'])
         ->middleware('can:'.PermissionName::ManageAllocations->value)
         ->name('allocations.upsert');
+    Route::put('allocations/person-month', [AllocationController::class, 'replacePersonMonth'])
+        ->middleware('can:'.PermissionName::ManageAllocations->value)
+        ->name('allocations.replace_person_month');
     Route::put('allocations/{allocation}', [AllocationController::class, 'update'])
         ->middleware('can:'.PermissionName::ManageAllocations->value)
         ->name('allocations.update');
