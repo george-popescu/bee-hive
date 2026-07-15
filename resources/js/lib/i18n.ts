@@ -864,6 +864,17 @@ const romanianMessages = {
     'Add allocation': 'Adaugă alocare',
     'Allocation history': 'Istoric alocare',
     'Allocated vs Actual': 'Alocat vs. Realizat',
+    'Team planning / Monthly capacity':
+        'Planificare echipă / Capacitate lunară',
+    'All people · all projects': 'Toate persoanele · toate proiectele',
+    Selected: 'Selectat',
+    Variance: 'Variație',
+    'Allocated / capacity': 'Alocat / capacitate',
+    'Capacity forecast': 'Prognoză capacitate',
+    ':count months visible': ':count luni vizibile',
+    'Remove :month': 'Elimină :month',
+    ':hours vs plan': ':hours față de plan',
+    ':person, :month, :percent allocated': ':person, :month, :percent alocat',
     'The dominant value is allocated capacity. Select a cell for capacity, actuals, and variance.':
         'Valoarea dominantă este capacitatea alocată. Selectează o celulă pentru capacitate, realizat și abatere.',
     'Add month': 'Adaugă lună',

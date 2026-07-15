@@ -167,6 +167,63 @@ it('aggregates ClickUp hours and audited adjustments for comparison including in
             ->where('permissions.adjustActualHours', true));
 });
 
+it('builds monthly capacity cells from leave allocations actuals and adjustments without inventing missing actuals', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo(PermissionName::ViewTeamLead->value, PermissionName::ViewManagement->value);
+    $person = Person::factory()->create([
+        'default_monthly_capacity_hours' => 160,
+    ]);
+    $project = Project::factory()->create(['client' => 'Acme', 'name' => 'Portal']);
+
+    Allocation::factory()->create([
+        'person_id' => $person,
+        'project_id' => $project,
+        'month' => '2026-05-01',
+        'planned_hours' => 80,
+    ]);
+    Allocation::factory()->create([
+        'person_id' => $person,
+        'project_id' => $project,
+        'month' => '2026-12-01',
+        'planned_hours' => 24,
+    ]);
+    TimeOff::factory()->create([
+        'person_id' => $person,
+        'status' => 'approved',
+        'start_date' => '2026-05-11',
+        'end_date' => '2026-05-11',
+        'active' => true,
+    ]);
+    TimeEntry::factory()->create([
+        'person_id' => $person,
+        'project_id' => $project,
+        'started_at' => '2026-05-12 09:00:00',
+        'duration_seconds' => 36 * 3600,
+    ]);
+    ActualAdjustment::factory()->create([
+        'person_id' => $person,
+        'project_id' => $project,
+        'month' => '2026-05-01',
+        'effective_date' => '2026-05-21',
+        'hours_delta' => 4,
+        'created_by' => $user,
+        'created_by_name' => $user->name,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('team_lead.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('capacityRows.0.months.2026-05.grossHours', 160)
+            ->where('capacityRows.0.months.2026-05.leaveHours', 8)
+            ->where('capacityRows.0.months.2026-05.availableHours', 152)
+            ->where('capacityRows.0.months.2026-05.allocatedHours', 80)
+            ->where('capacityRows.0.months.2026-05.actualHours', 40)
+            ->where('capacityRows.0.months.2026-05.allocationPercent', 52.6)
+            ->where('capacityRows.0.months.2026-05.freeHours', 72)
+            ->where('capacityRows.0.months.2026-12.allocatedHours', 24)
+            ->where('capacityRows.0.months.2026-12.actualHours', null));
+});
+
 it('builds weekly capacity from contract hours approved leave and monthly allocations', function () {
     $user = User::factory()->create();
     $user->givePermissionTo(PermissionName::ViewTeamLead->value, PermissionName::ViewManagement->value);
