@@ -18,6 +18,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 class PmBoardData
 {
@@ -61,19 +62,16 @@ class PmBoardData
         [$rangeStart, $rangeEnd] = $this->range($anchor, $period);
         $periodSecondsByProject = $this->periodSecondsByProject($projects, $rangeStart, $rangeEnd);
         $projects = $this->orderProjectsByPeriodHours($projects, $periodSecondsByProject);
-        $selectedProjects = $allProjectsSelected
-            ? $projects
-            : $projects->whereIn('id', $selectedProjectIds)->values();
+        if ($allProjectsSelected) {
+            $selectedProjects = $projects->take(1)->values();
+            $allProjectsSelected = false;
+        } else {
+            $selectedProjects = $projects->whereIn('id', $selectedProjectIds)->values();
+        }
         $selectedProject = $selectedProjects->count() === 1 && ! $includeInternal
             ? $selectedProjects->first()
             : null;
 
-        if ($selectedProject instanceof Project && $selectedProject->contract_type === ProjectBoardTemplate::Deliverables) {
-            $period = 'week';
-            [$rangeStart, $rangeEnd] = $this->range($anchor, $period);
-            $periodSecondsByProject = $this->periodSecondsByProject($projects, $rangeStart, $rangeEnd);
-            $projects = $this->orderProjectsByPeriodHours($projects, $periodSecondsByProject);
-        }
         $internalListIds = $this->internalListIds();
         $internalPeriodSeconds = $this->internalPeriodSeconds($internalListIds, $rangeStart, $rangeEnd);
         $internalOption = [
@@ -96,6 +94,7 @@ class PmBoardData
                 'includeInternal' => false,
                 'internalOption' => $internalOption,
                 'selectedProject' => null,
+                'today' => now()->toDateString(),
                 'period' => $this->periodData($period, $anchor, $rangeStart, $rangeEnd),
                 'workedTasks' => [],
                 'upcomingTasks' => [],
@@ -107,6 +106,7 @@ class PmBoardData
                 ],
                 'planning' => null,
                 'gantt' => null,
+                'annexBoard' => null,
                 'kpis' => [
                     'plannedHours' => 0.0,
                     'actualHours' => 0.0,
@@ -117,7 +117,7 @@ class PmBoardData
                     'selectedTasks' => 0,
                     'plannedNextWeekHours' => 0.0,
                     'activePeople' => 0,
-                    'projects' => $projects->count(),
+                    'projects' => $selectedProjects->count(),
                 ],
                 'sync' => $sync,
                 'permissions' => [
@@ -221,6 +221,18 @@ class PmBoardData
         $gantt = $isDeliverables
             ? $this->ganttData($selectedProject, $tasks, $taskRows, $planning)
             : null;
+        $annexBoard = $isDeliverables
+            ? $this->annexBoardData(
+                project: $selectedProject,
+                tasks: $tasks,
+                taskRows: $taskRows,
+                upcomingTasks: $upcomingTasks,
+                period: $period,
+                rangeStart: $rangeStart,
+                rangeEnd: $rangeEnd,
+                planning: $planning,
+            )
+            : null;
         $selectedPlans = collect(is_array($planning['plans'] ?? null) ? $planning['plans'] : [])
             ->where('selected', true);
 
@@ -238,6 +250,7 @@ class PmBoardData
             'selectedProject' => $selectedProject instanceof Project
                 ? $this->projectData($selectedProject, $periodSecondsByProject)
                 : null,
+            'today' => now()->toDateString(),
             'period' => $this->periodData($period, $anchor, $rangeStart, $rangeEnd),
             'workedTasks' => $workedTasks->all(),
             'upcomingTasks' => $upcomingTasks->all(),
@@ -245,6 +258,7 @@ class PmBoardData
             'summaryCharts' => $summaryCharts,
             'planning' => $planning,
             'gantt' => $gantt,
+            'annexBoard' => $annexBoard,
             'kpis' => [
                 'plannedHours' => round($workedTasks->sum('estimateHours'), 2),
                 'actualHours' => round($workedTasks->sum('periodHours'), 2),
@@ -255,7 +269,7 @@ class PmBoardData
                 'selectedTasks' => $selectedPlans->count(),
                 'plannedNextWeekHours' => round((float) $selectedPlans->sum('totalHours'), 2),
                 'activePeople' => count($peopleWorked),
-                'projects' => $projects->count(),
+                'projects' => $selectedProjects->count(),
             ],
             'sync' => $sync,
             'permissions' => [
@@ -691,6 +705,499 @@ class PmBoardData
     }
 
     /**
+     * @param  EloquentCollection<int, ClickUpTask>  $tasks
+     * @param  Collection<int, array<string, mixed>>  $taskRows
+     * @param  Collection<int, covariant array<string, mixed>>  $upcomingTasks
+     * @param  array<string, mixed>  $planning
+     * @return array<string, mixed>
+     */
+    private function annexBoardData(
+        Project $project,
+        EloquentCollection $tasks,
+        Collection $taskRows,
+        Collection $upcomingTasks,
+        string $period,
+        CarbonImmutable $rangeStart,
+        CarbonImmutable $rangeEnd,
+        array $planning,
+    ): array {
+        $taskData = $taskRows->keyBy('id');
+        $budgetListNames = $this->configuredBoardListNames($project, 'annex_budget_list_names');
+        $operationalListNames = $this->configuredBoardListNames($project, 'annex_operational_list_names');
+        $validationEnabled = $budgetListNames !== [] && $operationalListNames !== [];
+        $scopedTasks = $tasks->map(function (ClickUpTask $task) use (
+            $budgetListNames,
+            $operationalListNames,
+            $project,
+            $taskData,
+            $validationEnabled,
+        ): array {
+            $scope = $this->annexScope($project, $task);
+            $listName = trim((string) $task->clickUpList?->name);
+
+            return [
+                'annexKey' => $scope['key'],
+                'annexLabel' => $scope['label'],
+                'scopeSource' => $scope['source'],
+                'listName' => $listName === '' ? null : $listName,
+                'isBudgetTask' => ! $validationEnabled || $this->listNameMatches($listName, $budgetListNames),
+                'isOperationalTask' => ! $validationEnabled || $this->listNameMatches($listName, $operationalListNames),
+                'task' => $task,
+                'row' => $taskData->get($task->getKey(), []),
+            ];
+        });
+        $currentPlans = $period === 'week'
+            ? $this->selectedPlanHours($project, $upcomingTasks, $rangeStart->startOfWeek())
+            : collect();
+        $nextPlans = collect(is_array($planning['plans'] ?? null) ? $planning['plans'] : [])
+            ->filter(fn (mixed $plan): bool => is_array($plan) && ($plan['selected'] ?? false) === true)
+            ->keyBy('taskId');
+        $plannedTaskIds = $period === 'week'
+            ? $currentPlans->keys()->merge($nextPlans->keys())
+            : collect();
+        $activeAnnexKeys = $scopedTasks
+            ->groupBy('annexKey')
+            ->filter(function (Collection $annexTasks) use ($plannedTaskIds): bool {
+                if ($annexTasks->contains(fn (array $scopedTask): bool => $scopedTask['scopeSource'] === 'missing')) {
+                    return true;
+                }
+
+                return $annexTasks->contains(function (array $scopedTask) use ($plannedTaskIds): bool {
+                    $row = $scopedTask['row'];
+
+                    if (($row['active'] ?? false) !== true || ($row['isDone'] ?? false) === true) {
+                        return false;
+                    }
+
+                    return $plannedTaskIds->contains($scopedTask['task']->getKey())
+                        || ($row['estimateHours'] ?? null) !== null
+                        || (float) ($row['totalLoggedHours'] ?? 0) > 0
+                        || (float) ($row['periodHours'] ?? 0) > 0
+                        || ($row['startDate'] ?? null) !== null
+                        || ($row['dueDate'] ?? null) !== null;
+                });
+            })
+            ->keys();
+        $scopedTasks = $scopedTasks
+            ->whereIn('annexKey', $activeAnnexKeys)
+            ->values();
+        $annexes = $scopedTasks
+            ->groupBy('annexKey')
+            ->map(fn (Collection $annexTasks): array => $this->annexData($annexTasks))
+            ->sortBy(fn (array $annex): string => ($annex['scopeSource'] === 'missing' ? '1|' : '0|').$annex['label'])
+            ->values();
+        $weeklyRows = $period === 'week'
+            ? $scopedTasks
+                ->filter(function (array $scopedTask) use ($currentPlans): bool {
+                    $taskId = $scopedTask['task']->getKey();
+
+                    return $currentPlans->has($taskId)
+                        || (float) ($scopedTask['row']['periodHours'] ?? 0) > 0;
+                })
+                ->map(fn (array $scopedTask): array => $this->annexTaskRow(
+                    scopedTask: $scopedTask,
+                    plannedHours: $currentPlans->get($scopedTask['task']->getKey(), 0.0),
+                ))
+                ->sortBy(fn (array $row): string => $row['annexLabel'].'|'.$row['name'])
+                ->values()
+            : collect();
+        $agreedRows = $scopedTasks
+            ->filter(function (array $scopedTask) use ($period, $nextPlans): bool {
+                if ($period === 'week') {
+                    return $nextPlans->has($scopedTask['task']->getKey());
+                }
+
+                $row = $scopedTask['row'];
+
+                return ($row['active'] ?? false) === true
+                    && ($row['isDone'] ?? false) === false
+                    && (($row['estimateHours'] ?? null) !== null
+                        || (float) ($row['totalLoggedHours'] ?? 0) > 0
+                        || (float) ($row['periodHours'] ?? 0) > 0
+                        || ($row['startDate'] ?? null) !== null
+                        || ($row['dueDate'] ?? null) !== null);
+            })
+            ->map(function (array $scopedTask) use ($nextPlans): array {
+                $plan = $nextPlans->get($scopedTask['task']->getKey());
+
+                return $this->annexTaskRow(
+                    scopedTask: $scopedTask,
+                    plannedHours: is_array($plan) ? (float) ($plan['totalHours'] ?? 0) : null,
+                );
+            })
+            ->sortBy(fn (array $row): string => ($row['dueDate'] ?? '9999-12-31').'|'.$row['annexLabel'].'|'.$row['name'])
+            ->values();
+        $timelineRows = $annexes->map(fn (array $annex): array => [
+            'annexKey' => $annex['key'],
+            'label' => $annex['label'],
+            'type' => $annex['type'],
+            'status' => $annex['status'],
+            'startDate' => $annex['startDate'],
+            'dueDate' => $annex['dueDate'],
+            'missingFields' => array_values(array_intersect($annex['missingFields'], ['startDate', 'dueDate'])),
+        ]);
+        $knownStartDates = $timelineRows->pluck('startDate')->filter();
+        $knownDueDates = $timelineRows->pluck('dueDate')->filter();
+        $allEstimatesKnown = $annexes->every(fn (array $annex): bool => $annex['estimatedBudgetHours'] !== null);
+        $consumedHours = round((float) $annexes->sum('consumedHours'), 2);
+        $completedTasks = (int) $annexes->sum('completedTasks');
+        $taskCount = (int) $annexes->sum('totalTasks');
+        $validation = $this->annexValidationData(
+            scopedTasks: $scopedTasks,
+            enabled: $validationEnabled,
+            budgetListNames: $budgetListNames,
+            operationalListNames: $operationalListNames,
+        );
+
+        return [
+            'annexes' => $annexes->all(),
+            'weeklyRows' => $weeklyRows->all(),
+            'agreedRows' => $agreedRows->all(),
+            'timeline' => [
+                'start' => $knownStartDates->isEmpty() ? null : $knownStartDates->min(),
+                'end' => $knownDueDates->isEmpty() ? null : $knownDueDates->max(),
+                'rows' => $timelineRows->all(),
+            ],
+            'totals' => [
+                'contractBudgetHours' => null,
+                'contractDeadline' => null,
+                'estimatedBudgetHours' => $allEstimatesKnown
+                    ? round((float) $annexes->sum('estimatedBudgetHours'), 2)
+                    : null,
+                'consumedHours' => $consumedHours,
+                'remainingEstimateHours' => $allEstimatesKnown
+                    ? round((float) $annexes->sum('remainingEstimateHours'), 2)
+                    : null,
+                'closestDueDate' => $annexes->pluck('closestDueDate')->filter()->min(),
+                'completedTasks' => $completedTasks,
+                'taskCount' => $taskCount,
+                'deliveryProgress' => $taskCount > 0
+                    ? round(($completedTasks / $taskCount) * 100, 1)
+                    : null,
+                'periodStart' => $rangeStart->toDateString(),
+                'periodEnd' => $rangeEnd->toDateString(),
+            ],
+            'validation' => $validation,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, covariant array{annexKey: string, annexLabel: string, scopeSource: string, listName: string|null, isBudgetTask: bool, isOperationalTask: bool, task: ClickUpTask, row: array<string, mixed>}>  $annexTasks
+     * @return array<string, mixed>
+     */
+    private function annexData(Collection $annexTasks): array
+    {
+        $first = $annexTasks->first();
+        $deliveryRows = $annexTasks->where('isBudgetTask', true)->pluck('row');
+        $operationalRows = $annexTasks->where('isOperationalTask', true)->pluck('row');
+        $estimatedHours = $deliveryRows->pluck('estimateHours');
+        $allEstimatesKnown = $estimatedHours->every(fn (mixed $hours): bool => $hours !== null);
+        $estimatedBudgetHours = $deliveryRows->isNotEmpty() && $allEstimatesKnown
+            ? round((float) $estimatedHours->sum(), 2)
+            : null;
+        $consumedHours = round((float) $operationalRows->sum('totalLoggedHours'), 2);
+        $remainingEstimateHours = $estimatedBudgetHours === null
+            ? null
+            : round($estimatedBudgetHours - $consumedHours, 2);
+        $completedTasks = $deliveryRows->where('isDone', true)->count();
+        $totalTasks = $deliveryRows->count();
+        $activeRows = $deliveryRows->where('active', true)->where('isDone', false);
+        $knownStartDates = $deliveryRows->pluck('startDate')->filter();
+        $knownDueDates = $deliveryRows->pluck('dueDate')->filter();
+        $closestDueDate = $activeRows->pluck('dueDate')->filter()->min();
+        $missingFields = ['contractIdentifier', 'contractBudgetHours', 'contractDeadline'];
+
+        if (($first['scopeSource'] ?? null) === 'missing') {
+            $missingFields[] = 'annexScope';
+        }
+
+        if (! $allEstimatesKnown) {
+            $missingFields[] = 'estimateHours';
+        }
+
+        if ($knownStartDates->isEmpty()) {
+            $missingFields[] = 'startDate';
+        }
+
+        if ($knownDueDates->isEmpty()) {
+            $missingFields[] = 'dueDate';
+        }
+
+        if ($deliveryRows->contains(fn (array $row): bool => ($row['owners'] ?? []) === [])) {
+            $missingFields[] = 'owners';
+        }
+
+        $today = now()->toDateString();
+        $isAtRisk = ($closestDueDate !== null && $closestDueDate < $today)
+            || ($estimatedBudgetHours !== null && $consumedHours > $estimatedBudgetHours);
+        $hasExecutionDataMissing = array_intersect($missingFields, ['annexScope', 'estimateHours', 'startDate', 'dueDate']) !== [];
+        $label = (string) ($first['annexLabel'] ?? __('messages.pm_board.annex_data_missing'));
+
+        return [
+            'key' => (string) ($first['annexKey'] ?? 'annex-data-missing'),
+            'label' => $label,
+            'type' => $this->annexType($label, (string) ($first['scopeSource'] ?? 'missing')),
+            'scopeSource' => (string) ($first['scopeSource'] ?? 'missing'),
+            'contractIdentifier' => null,
+            'contractBudgetHours' => null,
+            'contractDeadline' => null,
+            'estimatedBudgetHours' => $estimatedBudgetHours,
+            'consumedHours' => $consumedHours,
+            'remainingEstimateHours' => $remainingEstimateHours,
+            'completedTasks' => $completedTasks,
+            'totalTasks' => $totalTasks,
+            'deliveryProgress' => $totalTasks > 0 ? round(($completedTasks / $totalTasks) * 100, 1) : null,
+            'closestDueDate' => $closestDueDate,
+            'startDate' => $knownStartDates->isEmpty() ? null : $knownStartDates->min(),
+            'dueDate' => $knownDueDates->isEmpty() ? null : $knownDueDates->max(),
+            'status' => $isAtRisk ? 'at_risk' : ($hasExecutionDataMissing ? 'data_missing' : 'on_track'),
+            'missingFields' => array_values(array_unique($missingFields)),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, covariant array{annexKey: string, annexLabel: string, scopeSource: string, listName: string|null, isBudgetTask: bool, isOperationalTask: bool, task: ClickUpTask, row: array<string, mixed>}>  $scopedTasks
+     * @param  list<string>  $budgetListNames
+     * @param  list<string>  $operationalListNames
+     * @return array<string, mixed>
+     */
+    private function annexValidationData(
+        Collection $scopedTasks,
+        bool $enabled,
+        array $budgetListNames,
+        array $operationalListNames,
+    ): array {
+        if (! $enabled) {
+            return [
+                'enabled' => false,
+                'budgetSourceLabels' => [],
+                'operationalSourceLabels' => [],
+                'deliverables' => [],
+                'issues' => [],
+                'people' => [],
+            ];
+        }
+
+        $deliverables = $scopedTasks
+            ->where('isBudgetTask', true)
+            ->map(function (array $scopedTask): array {
+                $task = $scopedTask['task'];
+                $row = $scopedTask['row'];
+
+                return [
+                    'annexKey' => $scopedTask['annexKey'],
+                    'annexLabel' => $scopedTask['annexLabel'],
+                    'taskId' => $task->getKey(),
+                    'name' => (string) ($row['name'] ?? $task->name),
+                    'url' => (string) ($row['url'] ?? "https://app.clickup.com/t/{$task->clickup_task_id}"),
+                    'estimateHours' => $row['estimateHours'] ?? null,
+                    'owners' => array_values(is_array($row['owners'] ?? null) ? $row['owners'] : []),
+                    'startDate' => $row['startDate'] ?? null,
+                    'dueDate' => $row['dueDate'] ?? null,
+                    'status' => (string) ($row['status'] ?? __('messages.common.no_status')),
+                    'isDone' => (bool) ($row['isDone'] ?? false),
+                    'missingFields' => array_values(array_filter([
+                        ($row['estimateHours'] ?? null) === null ? 'estimateHours' : null,
+                        ($row['owners'] ?? []) === [] ? 'owners' : null,
+                        ($row['startDate'] ?? null) === null ? 'startDate' : null,
+                        ($row['dueDate'] ?? null) === null ? 'dueDate' : null,
+                    ])),
+                ];
+            })
+            ->sortBy(fn (array $deliverable): string => $deliverable['name'])
+            ->values();
+        $people = $scopedTasks
+            ->filter(fn (array $scopedTask): bool => $scopedTask['isBudgetTask'] || $scopedTask['isOperationalTask'])
+            ->flatMap(function (array $scopedTask): array {
+                $row = $scopedTask['row'];
+                $owners = is_array($row['owners'] ?? null) ? $row['owners'] : [];
+                $contributors = collect(is_array($row['people'] ?? null) ? $row['people'] : [])
+                    ->pluck('name')
+                    ->filter(fn (mixed $name): bool => is_string($name) && trim($name) !== '')
+                    ->all();
+
+                return [...$owners, ...$contributors];
+            })
+            ->filter(fn (mixed $name): bool => is_string($name) && trim($name) !== '')
+            ->map(fn (string $name): string => trim($name))
+            ->unique(fn (string $name): string => mb_strtolower($name))
+            ->sort(SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+        $issues = collect([
+            ['field' => 'contractIdentifier', 'count' => 1, 'reason' => 'contract_identifier_missing'],
+            ['field' => 'contractBudgetHours', 'count' => 1, 'reason' => 'contract_budget_missing'],
+            ['field' => 'contractDeadline', 'count' => 1, 'reason' => 'contract_deadline_missing'],
+            [
+                'field' => 'estimateHours',
+                'count' => $deliverables->whereNull('estimateHours')->count(),
+                'reason' => 'deliverable_estimate_missing',
+            ],
+            [
+                'field' => 'owners',
+                'count' => $deliverables->filter(fn (array $deliverable): bool => $deliverable['owners'] === [])->count(),
+                'reason' => 'deliverable_owner_missing',
+            ],
+            [
+                'field' => 'startDate',
+                'count' => $deliverables->whereNull('startDate')->count(),
+                'reason' => 'deliverable_start_missing',
+            ],
+            [
+                'field' => 'dueDate',
+                'count' => $deliverables->whereNull('dueDate')->count(),
+                'reason' => 'deliverable_due_missing',
+            ],
+        ])->filter(fn (array $issue): bool => $issue['count'] > 0)->values();
+
+        return [
+            'enabled' => true,
+            'budgetSourceLabels' => $budgetListNames,
+            'operationalSourceLabels' => $operationalListNames,
+            'deliverables' => $deliverables->all(),
+            'issues' => $issues->all(),
+            'people' => $people->all(),
+        ];
+    }
+
+    /**
+     * @param  array{annexKey: string, annexLabel: string, scopeSource: string, task: ClickUpTask, row: array<string, mixed>}  $scopedTask
+     * @return array<string, mixed>
+     */
+    private function annexTaskRow(array $scopedTask, ?float $plannedHours): array
+    {
+        $task = $scopedTask['task'];
+        $row = $scopedTask['row'];
+        $workedHours = (float) ($row['periodHours'] ?? 0);
+
+        return [
+            'annexKey' => $scopedTask['annexKey'],
+            'annexLabel' => $scopedTask['annexLabel'],
+            'scopeSource' => $scopedTask['scopeSource'],
+            'taskId' => $task->getKey(),
+            'name' => (string) ($row['name'] ?? $task->name),
+            'url' => (string) ($row['url'] ?? "https://app.clickup.com/t/{$task->clickup_task_id}"),
+            'owners' => array_values(is_array($row['owners'] ?? null) ? $row['owners'] : []),
+            'plannedHours' => $plannedHours === null ? null : round($plannedHours, 2),
+            'workedHours' => round($workedHours, 2),
+            'estimateHours' => $row['estimateHours'] ?? null,
+            'remainingEstimateHours' => $row['remainingHours'] ?? null,
+            'startDate' => $row['startDate'] ?? null,
+            'dueDate' => $row['dueDate'] ?? null,
+            'status' => (string) ($row['status'] ?? __('messages.common.no_status')),
+            'isDone' => (bool) ($row['isDone'] ?? false),
+            'isUnplanned' => $plannedHours === 0.0 && $workedHours > 0,
+            'missingFields' => array_values(array_filter([
+                ($row['owners'] ?? []) === [] ? 'owners' : null,
+                ($row['estimateHours'] ?? null) === null ? 'estimateHours' : null,
+                ($row['startDate'] ?? null) === null ? 'startDate' : null,
+                ($row['dueDate'] ?? null) === null ? 'dueDate' : null,
+            ])),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, covariant array<string, mixed>>  $upcomingTasks
+     * @return Collection<int<0, max>, float>
+     */
+    private function selectedPlanHours(Project $project, Collection $upcomingTasks, CarbonImmutable $weekStart): Collection
+    {
+        return WeeklyPlan::query()
+            ->whereBelongsTo($project)
+            ->whereDate('week_start', $weekStart)
+            ->where('selected', true)
+            ->whereIn('click_up_task_id', $upcomingTasks->pluck('id')->all())
+            ->with(['allocations:id,weekly_plan_id,hours'])
+            ->get()
+            ->mapWithKeys(fn (WeeklyPlan $plan): array => [
+                $plan->click_up_task_id => round((float) $plan->allocations->sum('hours'), 2),
+            ]);
+    }
+
+    /** @return array{key: string, label: string, source: string} */
+    private function annexScope(Project $project, ClickUpTask $task): array
+    {
+        $configuredScopes = data_get($project->board_config, 'annex_modules', []);
+        $configured = is_array($configuredScopes)
+            ? ($configuredScopes[$task->clickup_task_id] ?? null)
+            : null;
+
+        if (is_string($configured) && trim($configured) !== '') {
+            $label = $this->normalizeAnnexLabel($configured);
+
+            return ['key' => $this->annexKey($label), 'label' => $label, 'source' => 'configured'];
+        }
+
+        preg_match_all('/\[([^\]]+)\]/u', $task->name, $matches);
+        $genericLabels = ['projects', 'project', 'new platform', 'la depozit', 'osiris'];
+        $labels = collect($matches[1])
+            ->map(fn (mixed $label): string => $this->normalizeAnnexLabel((string) $label))
+            ->reject(fn (string $label): bool => $label === '' || in_array(mb_strtolower($label), $genericLabels, true));
+
+        if ($labels->isNotEmpty()) {
+            $label = (string) $labels->last();
+
+            return ['key' => $this->annexKey($label), 'label' => $label, 'source' => 'task_name'];
+        }
+
+        return [
+            'key' => 'annex-data-missing',
+            'label' => __('messages.pm_board.annex_data_missing'),
+            'source' => 'missing',
+        ];
+    }
+
+    private function normalizeAnnexLabel(string $label): string
+    {
+        return trim((string) preg_replace('/\s+/u', ' ', $label));
+    }
+
+    private function annexKey(string $label): string
+    {
+        $slug = Str::slug($label);
+
+        return $slug !== '' ? $slug : 'annex-'.substr(sha1($label), 0, 10);
+    }
+
+    private function annexType(string $label, string $scopeSource): string
+    {
+        if ($scopeSource === 'missing') {
+            return 'unresolved';
+        }
+
+        $normalizedLabel = Str::lower(Str::ascii($label));
+
+        return str_contains($normalizedLabel, 'maintenance') || str_contains($normalizedLabel, 'mentenanta')
+            ? 'maintenance'
+            : 'fixed';
+    }
+
+    /** @return list<string> */
+    private function configuredBoardListNames(Project $project, string $key): array
+    {
+        $names = data_get($project->board_config, $key, []);
+
+        if (! is_array($names)) {
+            return [];
+        }
+
+        return array_values(collect($names)
+            ->filter(fn (mixed $name): bool => is_string($name) && trim($name) !== '')
+            ->map(fn (string $name): string => trim($name))
+            ->unique(fn (string $name): string => mb_strtolower($name))
+            ->values()
+            ->all());
+    }
+
+    /** @param list<string> $configuredNames */
+    private function listNameMatches(string $listName, array $configuredNames): bool
+    {
+        $normalized = mb_strtolower(trim($listName));
+
+        return $normalized !== '' && collect($configuredNames)
+            ->contains(fn (string $name): bool => mb_strtolower($name) === $normalized);
+    }
+
+    /**
      * @param  EloquentCollection<int, Project>  $projects
      * @return Collection<int, int>
      */
@@ -760,19 +1267,19 @@ class PmBoardData
 
     /**
      * @param  Collection<int, int>  $periodSecondsByProject
-     * @return array{id: int, label: string, template: string, templateLabel: string, managerIds: list<int>, periodHours: float}
+     * @return array{id: int, label: string, template: string|null, templateLabel: string, managerIds: list<int>, periodHours: float}
      */
     private function projectData(Project $project, Collection $periodSecondsByProject): array
     {
         $template = $project->contract_type instanceof ProjectBoardTemplate
             ? $project->contract_type
-            : ProjectBoardTemplate::TimeAndMaterials;
+            : null;
 
         return [
             'id' => $project->getKey(),
             'label' => $this->projectLabel($project),
-            'template' => $template->value,
-            'templateLabel' => $template->label(),
+            'template' => $template?->value,
+            'templateLabel' => $template?->label() ?? __('messages.pm_board.not_configured'),
             'managerIds' => array_values($project->managers->pluck('id')->map(fn (mixed $id): int => (int) $id)->all()),
             'periodHours' => round(((int) $periodSecondsByProject->get($project->getKey(), 0)) / 3600, 2),
         ];

@@ -2,6 +2,7 @@
 
 use App\Enums\PermissionName;
 use App\Enums\ProjectBoardTemplate;
+use App\Models\ClickUpList;
 use App\Models\ClickUpTask;
 use App\Models\Person;
 use App\Models\Project;
@@ -275,4 +276,274 @@ it('loads independent persisted plans for each following week', function () {
         ->and(data_get($firstWeek->inertiaProps('planning.plans'), '0.totalHours'))->toBe(8)
         ->and($secondWeek->inertiaProps('planning.weekStart'))->toBe('2026-07-20')
         ->and(data_get($secondWeek->inertiaProps('planning.plans'), '0.totalHours'))->toBe(3);
+});
+
+it('builds a truthful annex board from dynamic task scopes and weekly plans', function () {
+    $user = deliverablesBoardViewer();
+    $owner = Person::factory()->create(['name' => 'Dana Developer']);
+    $project = Project::factory()->create([
+        'client' => 'Example Client',
+        'name' => 'Delivery Platform',
+        'contract_type' => ProjectBoardTemplate::Deliverables,
+        'board_config' => [
+            'annex_modules' => ['automation-task' => 'Automation'],
+            'excluded_task_ids' => [],
+        ],
+    ]);
+    $automationTask = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_task_id' => 'automation-task',
+        'name' => 'Automate document flow',
+        'status' => 'in progress',
+        'estimate_seconds' => 8 * 3600,
+        'tracked_seconds' => 5 * 3600,
+        'start_at' => '2026-07-13 09:00:00',
+        'due_at' => '2026-07-18 18:00:00',
+    ]);
+    $automationTask->assignees()->attach($owner);
+    $gamificationTask = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_task_id' => 'gamification-task',
+        'name' => '[Gamification] Build leaderboard',
+        'status' => 'in progress',
+        'estimate_seconds' => 10 * 3600,
+        'tracked_seconds' => 4 * 3600,
+        'start_at' => '2026-07-14 09:00:00',
+        'due_at' => '2026-07-31 18:00:00',
+    ]);
+    $completedGamificationTask = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_task_id' => 'gamification-complete',
+        'name' => '[Gamification] Define rewards',
+        'status' => 'complete',
+        'estimate_seconds' => 2 * 3600,
+        'tracked_seconds' => 2 * 3600,
+        'start_at' => '2026-07-01 09:00:00',
+        'due_at' => '2026-07-10 18:00:00',
+    ]);
+    ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_task_id' => 'unresolved-task',
+        'name' => 'Clarify imported requirement',
+        'status' => 'to do',
+        'estimate_seconds' => null,
+        'tracked_seconds' => null,
+        'start_at' => null,
+        'due_at' => null,
+    ]);
+    TimeEntry::factory()->create([
+        'project_id' => $project,
+        'click_up_task_id' => $automationTask,
+        'person_id' => $owner,
+        'started_at' => '2026-07-15 10:00:00',
+        'duration_seconds' => 3 * 3600,
+    ]);
+    persistDeliverablesPlan($user, $project, $automationTask, $owner, '2026-07-13', 6);
+    persistDeliverablesPlan($user, $project, $gamificationTask, $owner, '2026-07-20', 4);
+
+    $response = $this->actingAs($user)->get(route('pm_board.index', [
+        'project' => $project->id,
+        'period' => 'week',
+        'anchor' => '2026-07-15',
+    ]));
+
+    $response->assertSuccessful()->assertInertia(fn (Assert $page) => $page
+        ->component('pm-board/index', false)
+        ->where('selectedProject.template', ProjectBoardTemplate::Deliverables->value)
+        ->has('annexBoard.annexes', 3)
+        ->has('annexBoard.weeklyRows')
+        ->has('annexBoard.agreedRows')
+        ->has('annexBoard.timeline.rows')
+        ->has('annexBoard.totals'));
+
+    $annexBoard = $response->inertiaProps('annexBoard');
+    $annexes = collect($annexBoard['annexes']);
+    $automation = $annexes->firstWhere('label', 'Automation');
+    $gamification = $annexes->firstWhere('label', 'Gamification');
+    $unresolved = $annexes->firstWhere('scopeSource', 'missing');
+    $currentWeek = collect($annexBoard['weeklyRows'])->firstWhere('taskId', $automationTask->id);
+    $nextWeek = collect($annexBoard['agreedRows'])->firstWhere('taskId', $gamificationTask->id);
+
+    expect($automation)->toMatchArray([
+        'scopeSource' => 'configured',
+        'contractIdentifier' => null,
+        'contractBudgetHours' => null,
+        'contractDeadline' => null,
+        'estimatedBudgetHours' => 8.0,
+        'consumedHours' => 5.0,
+        'remainingEstimateHours' => 3.0,
+        'completedTasks' => 0,
+        'totalTasks' => 1,
+        'deliveryProgress' => 0.0,
+        'closestDueDate' => '2026-07-18',
+    ])->and($gamification)->toMatchArray([
+        'scopeSource' => 'task_name',
+        'estimatedBudgetHours' => 12.0,
+        'consumedHours' => 6.0,
+        'remainingEstimateHours' => 6.0,
+        'completedTasks' => 1,
+        'totalTasks' => 2,
+        'deliveryProgress' => 50.0,
+    ])->and($unresolved)->not->toBeNull()
+        ->and($unresolved['contractBudgetHours'])->toBeNull()
+        ->and($unresolved['estimatedBudgetHours'])->toBeNull()
+        ->and($unresolved['missingFields'])->toContain('annexScope', 'contractIdentifier', 'contractBudgetHours', 'contractDeadline')
+        ->and($currentWeek)->toMatchArray([
+            'plannedHours' => 6.0,
+            'workedHours' => 3.0,
+            'owners' => ['Dana Developer'],
+        ])->and($nextWeek)->toMatchArray([
+            'plannedHours' => 4.0,
+            'remainingEstimateHours' => 6.0,
+            'dueDate' => '2026-07-31',
+        ])->and(collect($annexBoard['timeline']['rows'])->pluck('label'))
+        ->toContain('Automation', 'Gamification')
+        ->and($annexBoard['totals']['contractBudgetHours'])->toBeNull()
+        ->and($annexBoard['totals']['contractDeadline'])->toBeNull()
+        ->and($annexBoard['totals']['consumedHours'])->toEqual(11.0)
+        ->and($annexBoard['totals']['closestDueDate'])->toBe('2026-07-18')
+        ->and($annexBoard['totals']['taskCount'])->toBe(4);
+});
+
+it('separates configured deliverable estimates from operational consumption without double counting', function () {
+    $user = deliverablesBoardViewer();
+    $deliveryOwner = Person::factory()->create(['name' => 'Delivery Owner']);
+    $operator = Person::factory()->create(['name' => 'Operational Contributor']);
+    $unrelatedContributor = Person::factory()->create(['name' => 'Unrelated Contributor']);
+    $project = Project::factory()->create([
+        'client' => 'Example Contract Client',
+        'name' => 'CRM Delivery',
+        'contract_type' => ProjectBoardTemplate::Deliverables,
+        'board_config' => [
+            'annex_budget_list_names' => ['Features'],
+            'annex_operational_list_names' => ['Backlog'],
+            'excluded_task_ids' => [],
+        ],
+    ]);
+    ClickUpList::factory()->create([
+        'project_id' => $project,
+        'clickup_list_id' => 'features-list',
+        'name' => 'Features',
+    ]);
+    ClickUpList::factory()->create([
+        'project_id' => $project,
+        'clickup_list_id' => 'backlog-list',
+        'name' => 'Backlog',
+    ]);
+    ClickUpList::factory()->create([
+        'project_id' => $project,
+        'clickup_list_id' => 'archive-list',
+        'name' => 'Archive',
+    ]);
+    $firstDeliverable = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_list_id' => 'features-list',
+        'clickup_task_id' => 'deliverable-parent-one',
+        'name' => 'Architecture deliverable',
+        'status' => 'to do',
+        'estimate_seconds' => 100 * 3600,
+        'tracked_seconds' => null,
+        'start_at' => '2026-07-14 09:00:00',
+        'due_at' => null,
+    ]);
+    $firstDeliverable->assignees()->attach($deliveryOwner);
+    $secondDeliverable = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_list_id' => 'features-list',
+        'clickup_task_id' => 'deliverable-parent-two',
+        'name' => 'Handover deliverable',
+        'status' => 'to do',
+        'estimate_seconds' => 50 * 3600,
+        'tracked_seconds' => null,
+        'start_at' => null,
+        'due_at' => null,
+    ]);
+    $firstOperationalTask = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_list_id' => 'backlog-list',
+        'clickup_task_id' => 'operational-child-one',
+        'name' => 'Implement architecture',
+        'status' => 'in progress',
+        'estimate_seconds' => 100 * 3600,
+        'tracked_seconds' => null,
+        'start_at' => '2026-07-13 09:00:00',
+        'due_at' => null,
+    ]);
+    $secondOperationalTask = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_list_id' => 'backlog-list',
+        'clickup_task_id' => 'operational-child-two',
+        'name' => 'Prepare handover',
+        'status' => 'in progress',
+        'estimate_seconds' => 50 * 3600,
+        'tracked_seconds' => null,
+        'start_at' => '2026-07-13 09:00:00',
+        'due_at' => null,
+    ]);
+
+    foreach ([[$firstOperationalTask, 10], [$secondOperationalTask, 6]] as [$task, $hours]) {
+        TimeEntry::factory()->create([
+            'project_id' => $project,
+            'click_up_task_id' => $task,
+            'person_id' => $operator,
+            'started_at' => '2026-07-15 10:00:00',
+            'duration_seconds' => $hours * 3600,
+        ]);
+    }
+    TimeEntry::factory()->create([
+        'project_id' => $project,
+        'click_up_task_id' => $firstDeliverable,
+        'person_id' => $deliveryOwner,
+        'started_at' => '2026-07-15 10:00:00',
+        'duration_seconds' => 2 * 3600,
+    ]);
+    $unrelatedTask = ClickUpTask::factory()->create([
+        'project_id' => $project,
+        'clickup_list_id' => 'archive-list',
+        'clickup_task_id' => 'archived-reference',
+        'name' => 'Archived reference material',
+        'status' => 'to do',
+        'estimate_seconds' => null,
+        'tracked_seconds' => null,
+    ]);
+    TimeEntry::factory()->create([
+        'project_id' => $project,
+        'click_up_task_id' => $unrelatedTask,
+        'person_id' => $unrelatedContributor,
+        'started_at' => '2026-07-15 10:00:00',
+        'duration_seconds' => 3 * 3600,
+    ]);
+
+    $response = $this->actingAs($user)->get(route('pm_board.index', [
+        'project' => $project->id,
+        'period' => 'month',
+        'anchor' => '2026-07-15',
+    ]));
+
+    $annexBoard = $response->inertiaProps('annexBoard');
+    $validation = $annexBoard['validation'];
+    $issues = collect($validation['issues'])->keyBy('field');
+
+    expect($annexBoard['totals'])->toMatchArray([
+        'contractBudgetHours' => null,
+        'contractDeadline' => null,
+        'estimatedBudgetHours' => 150.0,
+        'consumedHours' => 16.0,
+        'remainingEstimateHours' => 134.0,
+    ])->and($validation)->toMatchArray([
+        'enabled' => true,
+        'budgetSourceLabels' => ['Features'],
+        'operationalSourceLabels' => ['Backlog'],
+    ])->and($validation['deliverables'])->toHaveCount(2)
+        ->and(collect($validation['deliverables'])->pluck('taskId'))
+        ->toContain($firstDeliverable->id, $secondDeliverable->id)
+        ->not->toContain($firstOperationalTask->id, $secondOperationalTask->id)
+        ->and(collect($validation['deliverables'])->sum('estimateHours'))->toEqual(150.0)
+        ->and($validation['people'])->toContain('Delivery Owner', 'Operational Contributor')
+        ->not->toContain('Unrelated Contributor')
+        ->and($issues->get('contractIdentifier'))->toMatchArray(['count' => 1])
+        ->and($issues->get('contractDeadline'))->toMatchArray(['count' => 1])
+        ->and($issues->get('owners'))->toMatchArray(['count' => 1])
+        ->and($issues->get('startDate'))->toMatchArray(['count' => 1])
+        ->and($issues->get('dueDate'))->toMatchArray(['count' => 2]);
 });

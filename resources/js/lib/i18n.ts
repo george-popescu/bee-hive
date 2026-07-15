@@ -19,6 +19,7 @@ const romanianMessages = {
         'Template-ul, vizibilitatea, PM-ii și regulile board-ului sunt configurații locale.',
     'Board template': 'Template board',
     'Deliverables / Fixed': 'Livrabile / Fixed',
+    'Not configured': 'Neconfigurat',
     'Active project': 'Proiect activ',
     'Visible board': 'Board vizibil',
     'Project Managers': 'Project Managers',
@@ -239,6 +240,190 @@ const romanianMessages = {
         'Plan, capacitate și execuție în aceeași imagine.',
     'Planned vs. actual': 'Planificat vs. realizat',
     'PM boards': 'Board-uri PM',
+    'PM boards · read-only from ClickUp':
+        'Board-uri PM · doar citire din ClickUp',
+    'PM / TTL review': 'Review PM / TTL',
+    'Contract delivery board': 'Board de livrare contractuală',
+    'weekly delivery review': 'review săptămânal de livrare',
+    'all active annexes': 'toate anexele active',
+    'Board filters': 'Filtre board',
+    'Period view': 'Vedere perioadă',
+    Annex: 'Anexă',
+    'All active annexes': 'Toate anexele active',
+    'ClickUp execution and estimates shown; no contractual values inferred':
+        'Sunt afișate execuția și estimările ClickUp; nu sunt deduse valori contractuale',
+    'Contract ID': 'ID contract',
+    'Approved budget': 'Buget aprobat',
+    'Contract deadline': 'Termen contractual',
+    'Across :count active annexes': 'În :count anexe active',
+    'Hours remaining': 'Ore rămase',
+    'From ClickUp task estimates': 'Din estimările taskurilor ClickUp',
+    'Closest ClickUp task due date':
+        'Cel mai apropiat termen al unui task ClickUp',
+    '1. Annex health': '1. Starea anexelor',
+    'ClickUp estimates, delivered tasks and due dates':
+        'Estimări ClickUp, taskuri livrate și termene',
+    ':completed of :total ClickUp tasks completed':
+        ':completed din :total taskuri ClickUp finalizate',
+    'closest due :date': 'cel mai apropiat termen :date',
+    'At risk': 'În risc',
+    'Data missing': 'Date lipsă',
+    'On track': 'În grafic',
+    ':consumed of :estimate estimated hours consumed':
+        ':consumed din :estimate ore estimate consumate',
+    ':hours estimated remaining': ':hours estimate rămase',
+    ':percent% delivery progress': ':percent% progres de livrare',
+    'No annex scopes are available.': 'Nu sunt disponibile scope-uri de anexă.',
+    '1. This week: planned vs. delivered':
+        '1. Săptămâna aceasta: planificat vs. livrat',
+    'Annex / task': 'Anexă / task',
+    Worked: 'Lucrat',
+    'Unplanned work': 'Lucru neplanificat',
+    'No planned or worked tasks in this week.':
+        'Nu există taskuri planificate sau lucrate în această săptămână.',
+    '2. Tasks agreed for next week':
+        '2. Taskuri agreate pentru săptămâna viitoare',
+    '2. Agreed work until delivery': '2. Lucru agreat până la livrare',
+    'Read-only from ClickUp task scopes':
+        'Doar citire din scope-urile taskurilor ClickUp',
+    'Estimate left': 'Estimare rămasă',
+    Due: 'Termen',
+    Delivery: 'Livrare',
+    'Date missing': 'Dată lipsă',
+    'No tasks are agreed for next week.':
+        'Nu sunt agreate taskuri pentru săptămâna viitoare.',
+    'No active agreed tasks are available.':
+        'Nu sunt disponibile taskuri active agreate.',
+    '3. Contract timeline': '3. Timeline contractual',
+    'Today line + ClickUp annex dates':
+        'Linia zilei curente + datele anexelor din ClickUp',
+    'Timeline for active annex scopes':
+        'Timeline pentru scope-urile anexelor active',
+    'Date data missing': 'Date calendaristice lipsă',
+    'No annex timeline is available.':
+        'Nu este disponibil niciun timeline de anexă.',
+    'Contract model: annex': 'Model contract: anexă',
+    'Annex and delivery control': 'Control anexă și livrare',
+    'ClickUp · updated :date': 'ClickUp · actualizat :date',
+    'ClickUp · synchronization date missing':
+        'ClickUp · dată sincronizare lipsă',
+    'Read-only': 'Doar citire',
+    'Dashboard sections': 'Secțiuni dashboard',
+    Overview: 'Overview',
+    Deliverables: 'Livrabile',
+    Timeline: 'Timeline',
+    'Estimated budget': 'Buget estimat',
+    ':count deliverables · :source': ':count livrabile · :source',
+    'Recorded hours': 'Ore înregistrate',
+    ':percent% available': ':percent% disponibil',
+    'Annex deadline': 'Deadline anexă',
+    'Forecast unavailable': 'Forecast indisponibil',
+    'Annex consumption': 'Consum anexă',
+    'Recorded hours compared with deliverable estimates':
+        'Ore logate raportate la estimarea livrabilelor',
+    consumed: 'consumate',
+    remaining: 'rămase',
+    'Estimate distribution': 'Distribuția estimării',
+    'Configured deliverable level · operational tasks are not counted twice':
+        'Nivelul configurat al livrabilelor · taskurile operaționale nu sunt numărate de două ori',
+    'Estimated hours per deliverable': 'Ore estimate per livrabil',
+    'Meeting readiness': 'Pregătire pentru meeting',
+    'Identified people': 'Oameni identificați',
+    unassigned: 'nealocat',
+    'Annex identifier is missing': 'Identificatorul anexei lipsește',
+    'The contract cannot be linked to its Sales OS annex yet.':
+        'Contractul nu poate fi încă legat de anexa sa din Sales OS.',
+    'Contract budget is missing': 'Bugetul contractual lipsește',
+    'ClickUp estimates are shown separately from the approved budget.':
+        'Estimările ClickUp sunt afișate separat de bugetul aprobat.',
+    'Annex deadline is missing': 'Deadline-ul anexei lipsește',
+    'Forecast cannot be compared with contractual time remaining.':
+        'Forecastul nu poate fi comparat cu timpul contractual rămas.',
+    ':count deliverables are unassigned': ':count livrabile nu au responsabil',
+    'Assign owners in ClickUp before committing the delivery plan.':
+        'Alocă responsabili în ClickUp înainte de asumarea planului de livrare.',
+    ':count deliverables have no start date':
+        ':count livrabile nu au dată de start',
+    'The derived timeline cannot place these deliverables.':
+        'Timeline-ul derivat nu poate poziționa aceste livrabile.',
+    ':count deliverables have no due date': ':count livrabile nu au deadline',
+    'The timeline remains incomplete without ClickUp due dates.':
+        'Timeline-ul rămâne incomplet fără deadline-uri în ClickUp.',
+    ':count deliverables have no estimate': ':count livrabile nu au estimare',
+    'The estimated delivery budget remains incomplete.':
+        'Bugetul estimat al livrării rămâne incomplet.',
+    'Annex deliverables': 'Livrabilele anexei',
+    'Real data from :source': 'Date reale din :source',
+    ':count deliverables': ':count livrabile',
+    Deliverable: 'Livrabil',
+    Deadline: 'Deadline',
+    'Timeline derived from ClickUp': 'Timeline derivat din ClickUp',
+    'Deliverables with missing start or due dates remain explicit':
+        'Livrabilele fără start sau deadline rămân marcate explicit',
+    'Deliverable dates synchronized from ClickUp':
+        'Datele livrabilelor sincronizate din ClickUp',
+    'Incomplete draft': 'Draft incomplet',
+    Complete: 'Complet',
+    'Timeline for configured deliverables':
+        'Timeline pentru livrabilele configurate',
+    'Missing start and/or due date': 'Fără start și/sau deadline',
+    'Source: ClickUp · estimated budget from :budget; recorded hours from :operations.':
+        'Sursă: ClickUp · buget estimat din :budget; ore înregistrate din :operations.',
+    'No project selected': 'Niciun proiect selectat',
+    'No visible projects are available.':
+        'Nu există proiecte vizibile disponibile.',
+    'T&M · approved task estimates · weekly execution':
+        'T&M · estimări aprobate pe task · execuție săptămânală',
+    'Fixed annexes · ClickUp execution and estimates':
+        'Anexe fixe · execuție și estimări din ClickUp',
+    'Contract template not configured · ClickUp execution only':
+        'Template contractual neconfigurat · doar execuție ClickUp',
+    'Template: T&M execution': 'Template: execuție T&M',
+    'Template: Fixed annex delivery': 'Template: livrare anexe fixe',
+    'Template: Not configured': 'Template: Neconfigurat',
+    'Worked this week': 'Lucrat săptămâna aceasta',
+    'Worked this month': 'Lucrat luna aceasta',
+    'Hours consumed': 'Ore consumate',
+    ':tasks tasks · :people people': ':tasks taskuri · :people persoane',
+    'Approved and operational work': 'Lucru aprobat și operațional',
+    'Across active deliverables': 'În livrabilele active',
+    'ClickUp execution only': 'Doar execuție ClickUp',
+    'Estimate remaining': 'Estimare rămasă',
+    'Across estimated active tasks': 'În taskurile active estimate',
+    'Across scheduled tasks': 'În taskurile programate',
+    'Estimate data missing': 'Date de estimare lipsă',
+    'Closest deadline': 'Cel mai apropiat deadline',
+    ':count overdue tasks': ':count taskuri întârziate',
+    'No deadline data': 'Date de deadline lipsă',
+    'Approved work: delivery vs. estimate':
+        'Lucru aprobat: livrare vs. estimare',
+    'Active deliverables: delivery vs. estimate':
+        'Livrabile active: livrare vs. estimare',
+    'Completion and estimate consumption are separate':
+        'Finalizarea și consumul estimării sunt separate',
+    'Contract data missing · ClickUp estimates shown':
+        'Date contractuale lipsă · sunt afișate estimările ClickUp',
+    'No estimated active tasks.': 'Nu există taskuri active estimate.',
+    ':percent% consumed': ':percent% consumat',
+    'ClickUp timeline': 'Timeline ClickUp',
+    'Task dates, estimates and owners from ClickUp':
+        'Datele taskurilor, estimările și responsabilii din ClickUp',
+    overdue: 'întârziat',
+    'Date data missing for active tasks.':
+        'Datele calendaristice lipsesc pentru taskurile active.',
+    'Next discussion': 'Următoarea discuție',
+    'Tasks requiring a delivery decision':
+        'Taskuri care necesită o decizie de livrare',
+    'Work item': 'Element de lucru',
+    'Hours left': 'Ore rămase',
+    Decision: 'Decizie',
+    'Review estimate': 'Revizuiește estimarea',
+    'Recover deadline': 'Recuperează deadline-ul',
+    'Confirm owner': 'Confirmă responsabilul',
+    'Confirm start': 'Confirmă startul',
+    'Confirm allocation': 'Confirmă alocarea',
+    'No active tasks require discussion.':
+        'Niciun task activ nu necesită discuție.',
     'PM boards powered by ClickUp': 'Board-uri PM alimentate din ClickUp',
     'by project': 'pe proiect',
     'Project Managers, Team Leads and Management use the same data, presented for their decisions.':
@@ -606,6 +791,7 @@ const romanianMessages = {
     'planned next week': 'planificate săptămâna următoare',
     'selected tasks': 'taskuri selectate',
     'Weekly team capacity': 'Capacitate săptămânală a echipei',
+    'Workspace / Team planning': 'Workspace / Planificare echipă',
     'All teams': 'Toate echipele',
     'All visible people and all projects':
         'Toate persoanele vizibile și toate proiectele',
@@ -622,6 +808,7 @@ const romanianMessages = {
     'Available capacity equals contract capacity minus approved leave and unavailability.':
         'Capacitatea disponibilă este capacitatea contractuală minus concediile și indisponibilitățile aprobate.',
     'All capacity states': 'Toate stările de capacitate',
+    'Capacity status': 'Status capacitate',
     'Over capacity': 'Peste capacitate',
     'Capacity available': 'Capacitate disponibilă',
     'Fully allocated': 'Alocat complet',
@@ -632,6 +819,12 @@ const romanianMessages = {
     Free: 'Liber',
     'Role missing': 'Rol lipsă',
     'No allocation': 'Fără alocare',
+    'No available capacity': 'Fără capacitate disponibilă',
+    'No over-allocation': 'Fără supra-alocare',
+    'Project legend': 'Legendă proiecte',
+    'Allocation for :person': 'Alocare pentru :person',
+    'Monthly fallback': 'Fallback lunar',
+    'Mixed weekly / monthly': 'Mixt săptămânal / lunar',
     'No people match the selected filters.':
         'Nicio persoană nu corespunde filtrelor selectate.',
     'Weekly allocation is derived from the monthly HiveOps plan and distributed proportionally across the working days in this week.':

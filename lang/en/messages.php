@@ -31,9 +31,11 @@ return [
     ],
     'pm_board' => [
         'deliverables_template' => 'Deliverables / Fixed',
+        'not_configured' => 'Not configured',
         'planning_conflict' => 'The planning was changed by another user. Reload the page.',
         'week_must_start_on_monday' => 'The week must start on Monday.',
         'general_module' => 'General',
+        'annex_data_missing' => 'Annex data missing',
     ],
     'adjustments' => [
         'created' => 'The adjustment was recorded.',

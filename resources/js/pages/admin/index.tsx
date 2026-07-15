@@ -61,7 +61,7 @@ type Person = {
 type Project = {
     id: number;
     label: string;
-    contractType: 'tm' | 'deliverables';
+    contractType: 'tm' | 'deliverables' | null;
     boardVisible: boolean;
     active: boolean;
     managerIds: number[];
@@ -298,7 +298,7 @@ function ProjectDialog({
                         <label className="grid gap-2">
                             <Label>{t('Board template')}</Label>
                             <Select
-                                value={form.data.contract_type}
+                                value={form.data.contract_type ?? undefined}
                                 onValueChange={(value) =>
                                     form.setData(
                                         'contract_type',
@@ -307,7 +307,9 @@ function ProjectDialog({
                                 }
                             >
                                 <SelectTrigger>
-                                    <SelectValue />
+                                    <SelectValue
+                                        placeholder={t('Not configured')}
+                                    />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="tm">
@@ -816,11 +818,14 @@ export default function AdminIndex({
                                             <TableCell>
                                                 <Badge variant="outline">
                                                     {project.contractType ===
-                                                    'deliverables'
-                                                        ? t(
-                                                              'Deliverables / Fixed',
-                                                          )
-                                                        : 'T&M'}
+                                                    null
+                                                        ? t('Not configured')
+                                                        : project.contractType ===
+                                                            'deliverables'
+                                                          ? t(
+                                                                'Deliverables / Fixed',
+                                                            )
+                                                          : 'T&M'}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell>

@@ -1,6 +1,5 @@
 import {
     Head,
-    Link,
     router,
     setLayoutProps,
     useForm,
@@ -9,8 +8,6 @@ import {
 } from '@inertiajs/react';
 import {
     AlertTriangle,
-    ArrowLeft,
-    ArrowRight,
     Check,
     ChevronDown,
     LoaderCircle,
@@ -33,6 +30,8 @@ import {
     update as updateAllocation,
     upsert,
 } from '@/actions/App/Http/Controllers/AllocationController';
+import type { WeeklyPlanning } from '@/components/team-planning/weekly-capacity';
+import { WeeklyCapacityView } from '@/components/team-planning/weekly-capacity-view';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -193,42 +192,6 @@ type CapacityRow = {
     person: Pick<Person, 'id' | 'name' | 'jobRole' | 'isExternal'>;
     roles: string[];
     months: Record<string, CapacityMonth>;
-};
-type WeeklyRow = {
-    person: Pick<Person, 'id' | 'name' | 'jobRole' | 'isExternal'>;
-    roles: string[];
-    teamIds: number[];
-    contractHours: number;
-    leaveHours: number;
-    availableHours: number;
-    allocatedHours: number;
-    freeHours: number;
-    status: 'over' | 'unallocated' | 'available' | 'balanced';
-    allocations: Array<{
-        projectId: number;
-        label: string;
-        hours: number;
-        source: 'weekly' | 'prorated' | 'mixed';
-    }>;
-};
-type WeeklyPlanning = {
-    period: {
-        start: string;
-        end: string;
-        previous: string;
-        next: string;
-    };
-    allocationMethod: 'weekly_with_monthly_fallback';
-    rows: WeeklyRow[];
-    totals: {
-        contractHours: number;
-        leaveHours: number;
-        availableHours: number;
-        allocatedHours: number;
-        freeHours: number;
-        overallocatedPeople: number;
-        unallocatedPeople: number;
-    };
 };
 type AllocationEntry = {
     id: number;
@@ -1395,434 +1358,6 @@ function AdjustmentHistory({
     );
 }
 
-const allocationColors = [
-    'bg-sky-500',
-    'bg-emerald-500',
-    'bg-amber-500',
-    'bg-violet-500',
-    'bg-rose-500',
-    'bg-cyan-500',
-];
-
-function WeekOverview({
-    weekly,
-    projects,
-    roles,
-    teams,
-}: {
-    weekly: WeeklyPlanning;
-    projects: Props['projects'];
-    roles: string[];
-    teams: Team[];
-}) {
-    const { languageTag, t } = useTranslations();
-    const [teamFilter, setTeamFilter] = useState('all');
-    const [projectFilter, setProjectFilter] = useState('all');
-    const [roleFilter, setRoleFilter] = useState('all');
-    const [statusFilter, setStatusFilter] = useState('all');
-    const rows = weekly.rows.filter(
-        (row) =>
-            (teamFilter === 'all' ||
-                row.teamIds.includes(Number(teamFilter))) &&
-            (projectFilter === 'all' ||
-                row.allocations.some(
-                    (allocation) =>
-                        String(allocation.projectId) === projectFilter,
-                )) &&
-            (roleFilter === 'all' || row.roles.includes(roleFilter)) &&
-            (statusFilter === 'all' || row.status === statusFilter),
-    );
-    const totals = rows.reduce(
-        (result, row) => ({
-            contractHours: result.contractHours + row.contractHours,
-            leaveHours: result.leaveHours + row.leaveHours,
-            availableHours: result.availableHours + row.availableHours,
-            allocatedHours: result.allocatedHours + row.allocatedHours,
-            freeHours: result.freeHours + Math.max(0, row.freeHours),
-            overallocatedPeople:
-                result.overallocatedPeople + (row.status === 'over' ? 1 : 0),
-            unallocatedPeople:
-                result.unallocatedPeople +
-                (row.status === 'unallocated' ? 1 : 0),
-        }),
-        {
-            contractHours: 0,
-            leaveHours: 0,
-            availableHours: 0,
-            allocatedHours: 0,
-            freeHours: 0,
-            overallocatedPeople: 0,
-            unallocatedPeople: 0,
-        },
-    );
-    const periodLabel = `${formatDate(weekly.period.start, languageTag)} – ${formatDate(weekly.period.end, languageTag)}`;
-
-    return (
-        <div className="flex flex-col gap-4">
-            <Card>
-                <CardContent className="flex flex-col justify-between gap-4 pt-6 lg:flex-row lg:items-center">
-                    <div>
-                        <p className="text-sm font-medium">
-                            {t('Weekly team capacity')}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                            {t('All visible people and all projects')} ·{' '}
-                            {periodLabel}
-                        </p>
-                    </div>
-                    <div className="flex w-full items-center gap-2 sm:w-auto">
-                        <Button size="icon" variant="outline" asChild>
-                            <Link
-                                href={teamLeadIndex({
-                                    query: { week: weekly.period.previous },
-                                })}
-                                preserveScroll
-                                aria-label={t('Previous week')}
-                            >
-                                <ArrowLeft />
-                            </Link>
-                        </Button>
-                        <span className="min-w-0 flex-1 text-center text-sm font-medium sm:min-w-48">
-                            {periodLabel}
-                        </span>
-                        <Button size="icon" variant="outline" asChild>
-                            <Link
-                                href={teamLeadIndex({
-                                    query: { week: weekly.period.next },
-                                })}
-                                preserveScroll
-                                aria-label={t('Next week')}
-                            >
-                                <ArrowRight />
-                            </Link>
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {[
-                    [
-                        t('Contract capacity'),
-                        `${formatHours(totals.contractHours, languageTag)}h`,
-                        t('Selected people'),
-                    ],
-                    [
-                        t('Available after leave'),
-                        `${formatHours(totals.availableHours, languageTag)}h`,
-                        t(':hours leave / unavailable', {
-                            hours: `${formatHours(totals.leaveHours, languageTag)}h`,
-                        }),
-                    ],
-                    [
-                        t('Allocated'),
-                        `${formatHours(totals.allocatedHours, languageTag)}h`,
-                        t(':count people over capacity', {
-                            count: totals.overallocatedPeople,
-                        }),
-                    ],
-                    [
-                        t('Unallocated'),
-                        `${formatHours(totals.freeHours, languageTag)}h`,
-                        t(':count people without allocation', {
-                            count: totals.unallocatedPeople,
-                        }),
-                    ],
-                ].map(([label, value, detail]) => (
-                    <Card key={label}>
-                        <CardHeader className="pb-2">
-                            <CardDescription>{label}</CardDescription>
-                            <CardTitle className="text-2xl tabular-nums">
-                                {value}
-                            </CardTitle>
-                            <p className="text-xs text-muted-foreground">
-                                {detail}
-                            </p>
-                        </CardHeader>
-                    </Card>
-                ))}
-            </div>
-
-            <Card className="min-w-0">
-                <CardHeader>
-                    <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
-                        <div>
-                            <CardTitle>{t('Team overview')}</CardTitle>
-                            <CardDescription>
-                                {t(
-                                    'Available capacity equals contract capacity minus approved leave and unavailability.',
-                                )}
-                            </CardDescription>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            <Select
-                                value={teamFilter}
-                                onValueChange={setTeamFilter}
-                            >
-                                <SelectTrigger className="w-full sm:w-48">
-                                    <SelectValue placeholder={t('All teams')} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        <SelectItem value="all">
-                                            {t('All teams')}
-                                        </SelectItem>
-                                        {teams.map((team) => (
-                                            <SelectItem
-                                                key={team.id}
-                                                value={String(team.id)}
-                                            >
-                                                {team.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
-                            <Select
-                                value={projectFilter}
-                                onValueChange={setProjectFilter}
-                            >
-                                <SelectTrigger className="w-full sm:w-56">
-                                    <SelectValue
-                                        placeholder={t('All projects')}
-                                    />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        <SelectItem value="all">
-                                            {t('All projects')}
-                                        </SelectItem>
-                                        {projects.map((project) => (
-                                            <SelectItem
-                                                key={project.id}
-                                                value={String(project.id)}
-                                            >
-                                                {project.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
-                            <Select
-                                value={roleFilter}
-                                onValueChange={setRoleFilter}
-                            >
-                                <SelectTrigger className="w-full sm:w-44">
-                                    <SelectValue placeholder={t('All roles')} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        <SelectItem value="all">
-                                            {t('All roles')}
-                                        </SelectItem>
-                                        {roles.map((role) => (
-                                            <SelectItem key={role} value={role}>
-                                                {role}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
-                            <Select
-                                value={statusFilter}
-                                onValueChange={setStatusFilter}
-                            >
-                                <SelectTrigger className="w-full sm:w-48">
-                                    <SelectValue
-                                        placeholder={t('All capacity states')}
-                                    />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectGroup>
-                                        <SelectItem value="all">
-                                            {t('All capacity states')}
-                                        </SelectItem>
-                                        <SelectItem value="over">
-                                            {t('Over capacity')}
-                                        </SelectItem>
-                                        <SelectItem value="available">
-                                            {t('Capacity available')}
-                                        </SelectItem>
-                                        <SelectItem value="balanced">
-                                            {t('Fully allocated')}
-                                        </SelectItem>
-                                        <SelectItem value="unallocated">
-                                            {t('Without allocation')}
-                                        </SelectItem>
-                                    </SelectGroup>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent className="overflow-x-auto px-0">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="min-w-52">
-                                    {t('Person')}
-                                </TableHead>
-                                <TableHead className="text-right">
-                                    {t('Contract')}
-                                </TableHead>
-                                <TableHead className="text-right">
-                                    {t('Leave')}
-                                </TableHead>
-                                <TableHead className="text-right">
-                                    {t('Available')}
-                                </TableHead>
-                                <TableHead className="min-w-80">
-                                    {t('Allocation across all projects')}
-                                </TableHead>
-                                <TableHead className="text-right">
-                                    {t('Allocated')}
-                                </TableHead>
-                                <TableHead className="text-right">
-                                    {t('Free')}
-                                </TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {rows.map((row) => {
-                                const denominator = Math.max(
-                                    row.availableHours,
-                                    row.allocatedHours,
-                                    1,
-                                );
-
-                                return (
-                                    <TableRow key={row.person.id}>
-                                        <TableCell>
-                                            <PersonLabel
-                                                person={{
-                                                    ...row.person,
-                                                    capacity: {},
-                                                }}
-                                            />
-                                            <p className="text-xs text-muted-foreground">
-                                                {row.roles.join(' / ') ||
-                                                    t('Role missing')}
-                                            </p>
-                                        </TableCell>
-                                        <TableCell className="text-right tabular-nums">
-                                            {formatHours(
-                                                row.contractHours,
-                                                languageTag,
-                                            )}
-                                            h
-                                        </TableCell>
-                                        <TableCell className="text-right tabular-nums">
-                                            {row.leaveHours > 0
-                                                ? `${formatHours(row.leaveHours, languageTag)}h`
-                                                : '—'}
-                                        </TableCell>
-                                        <TableCell className="text-right tabular-nums">
-                                            {formatHours(
-                                                row.availableHours,
-                                                languageTag,
-                                            )}
-                                            h
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex h-2.5 overflow-hidden rounded-full bg-muted">
-                                                {row.allocations.map(
-                                                    (allocation, index) => (
-                                                        <span
-                                                            key={
-                                                                allocation.projectId
-                                                            }
-                                                            className={
-                                                                allocationColors[
-                                                                    index %
-                                                                        allocationColors.length
-                                                                ]
-                                                            }
-                                                            style={{
-                                                                width: `${(allocation.hours / denominator) * 100}%`,
-                                                            }}
-                                                            title={`${allocation.label}: ${formatHours(allocation.hours, languageTag)}h`}
-                                                        />
-                                                    ),
-                                                )}
-                                            </div>
-                                            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                                {row.allocations.map(
-                                                    (allocation, index) => (
-                                                        <span
-                                                            key={
-                                                                allocation.projectId
-                                                            }
-                                                            className="inline-flex items-center gap-1"
-                                                        >
-                                                            <span
-                                                                className={`size-2 rounded-full ${allocationColors[index % allocationColors.length]}`}
-                                                            />
-                                                            {allocation.label}{' '}
-                                                            {formatHours(
-                                                                allocation.hours,
-                                                                languageTag,
-                                                            )}
-                                                            h
-                                                        </span>
-                                                    ),
-                                                )}
-                                                {row.allocations.length ===
-                                                    0 && (
-                                                    <span>
-                                                        {t('No allocation')}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="text-right tabular-nums">
-                                            {formatHours(
-                                                row.allocatedHours,
-                                                languageTag,
-                                            )}
-                                            h
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <Badge
-                                                variant={
-                                                    row.freeHours < 0
-                                                        ? 'destructive'
-                                                        : row.freeHours > 0
-                                                          ? 'outline'
-                                                          : 'success'
-                                                }
-                                            >
-                                                {formatHours(
-                                                    row.freeHours,
-                                                    languageTag,
-                                                )}
-                                                h
-                                            </Badge>
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })}
-                            {rows.length === 0 && (
-                                <EmptyRow
-                                    columns={7}
-                                    label={t(
-                                        'No people match the selected filters.',
-                                    )}
-                                />
-                            )}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
-
-            <p className="text-xs text-muted-foreground">
-                {t(
-                    'Saved weekly hours are used when available. Allocations without a weekly distribution are prorated from the monthly plan by working days.',
-                )}
-            </p>
-        </div>
-    );
-}
-
 function AllocationEditorForm({
     entry,
     initialPersonId,
@@ -2832,59 +2367,62 @@ export default function TeamLeadPlan({
         <>
             <Head title={t('Team planning')} />
             <div className="flex h-full flex-1 flex-col gap-4 overflow-x-hidden p-3 sm:p-4">
-                <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
-                    <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                            <UsersRound className="size-6" />
-                            <h1 className="text-2xl font-semibold tracking-tight">
-                                {t('Team planning')}
-                            </h1>
+                {planningView === 'monthly' && (
+                    <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-start">
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center gap-2">
+                                <UsersRound className="size-6" />
+                                <h1 className="text-2xl font-semibold tracking-tight">
+                                    {t('Team planning')}
+                                </h1>
+                            </div>
+                            <p className="max-w-3xl text-sm text-muted-foreground">
+                                {t(
+                                    'Actual hours come from ClickUp. Corrections are separate, audited adjustments, while planned hours remain editable for authorized users.',
+                                )}
+                            </p>
                         </div>
-                        <p className="max-w-3xl text-sm text-muted-foreground">
-                            {t(
-                                'Actual hours come from ClickUp. Corrections are separate, audited adjustments, while planned hours remain editable for authorized users.',
+                        <div className="flex flex-wrap items-center gap-2">
+                            {permissions.adjustActualHours && (
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setAdjustmentOpen(true)}
+                                >
+                                    <Plus data-icon="inline-start" />
+                                    {t('Add adjustment')}
+                                </Button>
                             )}
-                        </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        {permissions.adjustActualHours && (
-                            <Button
+                            <ToggleGroup
+                                type="single"
+                                value={planningView}
                                 variant="outline"
-                                onClick={() => setAdjustmentOpen(true)}
+                                aria-label={t('Planning period')}
+                                onValueChange={(value) => {
+                                    if (value) {
+                                        setPlanningView(
+                                            value as 'weekly' | 'monthly',
+                                        );
+                                    }
+                                }}
                             >
-                                <Plus data-icon="inline-start" />
-                                {t('Add adjustment')}
-                            </Button>
-                        )}
-                        <ToggleGroup
-                            type="single"
-                            value={planningView}
-                            variant="outline"
-                            aria-label={t('Planning period')}
-                            onValueChange={(value) => {
-                                if (value) {
-                                    setPlanningView(
-                                        value as 'weekly' | 'monthly',
-                                    );
-                                }
-                            }}
-                        >
-                            <ToggleGroupItem value="weekly">
-                                {t('Week')}
-                            </ToggleGroupItem>
-                            <ToggleGroupItem value="monthly">
-                                {t('Month')}
-                            </ToggleGroupItem>
-                        </ToggleGroup>
+                                <ToggleGroupItem value="weekly">
+                                    {t('Week')}
+                                </ToggleGroupItem>
+                                <ToggleGroupItem value="monthly">
+                                    {t('Month')}
+                                </ToggleGroupItem>
+                            </ToggleGroup>
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {planningView === 'weekly' ? (
-                    <WeekOverview
+                    <WeeklyCapacityView
                         weekly={weekly}
                         projects={projects}
                         roles={roles}
                         teams={teams}
+                        onShowMonthly={() => setPlanningView('monthly')}
                     />
                 ) : (
                     <>

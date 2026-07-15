@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\PermissionName;
+use App\Enums\ProjectBoardTemplate;
 use App\Models\AuditLog;
 use App\Models\Person;
 use App\Models\Project;
@@ -56,6 +57,79 @@ it('protects the admin page and exposes all administration collections', functio
             ->has('permissions')
             ->has('settings')
             ->has('auditLogs'));
+});
+
+it('preserves an unconfigured project template in the administration payload', function () {
+    $project = Project::factory()->create([
+        'client' => 'Acme',
+        'name' => 'Unknown contract',
+        'contract_type' => null,
+    ]);
+
+    $this->actingAs(adminSettingsEditor())
+        ->get(route('admin.index'))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('projects', 1)
+            ->where('projects.0.id', $project->id)
+            ->where('projects.0.contractType', null));
+});
+
+it('configures only the mapped reference projects with their approved templates', function () {
+    $laDepozit = Project::factory()->create([
+        'client' => 'La Depozit',
+        'name' => 'La Depozit',
+        'contract_type' => null,
+    ]);
+    $mim = Project::factory()->create([
+        'client' => 'Iancu Guda',
+        'name' => 'MiM',
+        'contract_type' => null,
+    ]);
+    $mimDev = Project::factory()->create([
+        'client' => 'Iancu Guda',
+        'name' => 'MiM DEV',
+        'contract_type' => null,
+    ]);
+    $mimMaintenance = Project::factory()->create([
+        'client' => 'Iancu Guda',
+        'name' => 'MiM Mentenanta',
+        'contract_type' => null,
+    ]);
+    $btl = Project::factory()->create([
+        'client' => 'BTL',
+        'name' => 'CRM Platform',
+        'contract_type' => null,
+        'board_config' => ['excluded_task_ids' => ['recurring-task']],
+    ]);
+    $workbookPlaceholder = Project::factory()->create([
+        'clickup_folder_id' => null,
+        'client' => 'Iancu Guda',
+        'name' => 'MiM',
+        'contract_type' => null,
+    ]);
+    $unrelated = Project::factory()->create([
+        'client' => 'Other',
+        'name' => 'Project',
+        'contract_type' => null,
+    ]);
+
+    $migration = require database_path('migrations/2026_07_15_132915_configure_reference_project_templates.php');
+    $migration->up();
+    $migration->up();
+
+    expect($laDepozit->refresh()->contract_type)->toBe(ProjectBoardTemplate::TimeAndMaterials)
+        ->and($mim->refresh()->contract_type)->toBe(ProjectBoardTemplate::Deliverables)
+        ->and($mimDev->refresh()->contract_type)->toBe(ProjectBoardTemplate::Deliverables)
+        ->and($mimMaintenance->refresh()->contract_type)->toBeNull()
+        ->and($btl->refresh()->contract_type)->toBe(ProjectBoardTemplate::Deliverables)
+        ->and($btl->board_config)->toMatchArray([
+            'excluded_task_ids' => ['recurring-task'],
+            'annex_budget_list_names' => ['Features'],
+            'annex_operational_list_names' => ['Backlog'],
+        ])
+        ->and($workbookPlaceholder->refresh()->contract_type)->toBeNull()
+        ->and($unrelated->refresh()->contract_type)->toBeNull();
 });
 
 it('updates only operational person fields and records before and after values', function () {

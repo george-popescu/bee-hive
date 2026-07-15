@@ -68,6 +68,8 @@ it('shows a team lead only the active people in teams they lead', function () {
             ->has('planRows', 1)
             ->has('teams', 1)
             ->where('teams.0.id', $team->id)
+            ->has('projects', 1)
+            ->where('projects.0.id', $project->id)
             ->where('weekly.rows.0.teamIds', [$team->id])
             ->where('planRows.0.person.name', 'Ana Vizibilă')
             ->where('planRows.0.project.label', 'Acme — Portal')
@@ -202,7 +204,16 @@ it('builds weekly capacity from contract hours approved leave and monthly alloca
             ->where('weekly.rows.0.availableHours', 32)
             ->where('weekly.rows.0.allocatedHours', 20)
             ->where('weekly.rows.0.freeHours', 12)
+            ->where('weekly.rows.0.status', 'available')
             ->where('weekly.rows.0.allocations.0.label', 'Acme — Portal')
+            ->where('weekly.rows.0.allocations.0.source', 'prorated')
+            ->where('weekly.totals.contractHours', 40)
+            ->where('weekly.totals.leaveHours', 8)
+            ->where('weekly.totals.availableHours', 32)
+            ->where('weekly.totals.allocatedHours', 20)
+            ->where('weekly.totals.freeHours', 12)
+            ->where('weekly.totals.overallocatedPeople', 0)
+            ->where('weekly.totals.unallocatedPeople', 0)
             ->where('capacityRows.0.months.2026-07.grossHours', 160)
             ->where('capacityRows.0.months.2026-07.leaveHours', 8)
             ->where('capacityRows.0.months.2026-07.availableHours', 152)
@@ -235,4 +246,82 @@ it('uses saved weekly distribution before the monthly proration fallback', funct
             ->where('weekly.rows.0.allocations.0.source', 'weekly')
             ->where('allocationEntries.0.weeklyHours.1.hours', 16)
             ->where('allocationEntries.0.planningComment', 'Prioritate pentru lansare.'));
+});
+
+it('does not report people with no available capacity as unallocated', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo(PermissionName::ViewTeamLead->value, PermissionName::ViewManagement->value);
+    $person = Person::factory()->create([
+        'name' => 'Ana Indisponibilă',
+        'weekly_capacity_hours' => 40,
+    ]);
+
+    TimeOff::factory()->create([
+        'person_id' => $person,
+        'status' => 'approved',
+        'start_date' => '2026-07-13',
+        'end_date' => '2026-07-17',
+        'active' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('team_lead.index', ['week' => '2026-07-13']))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('weekly.rows.0.availableHours', 0)
+            ->where('weekly.rows.0.allocatedHours', 0)
+            ->where('weekly.rows.0.freeHours', 0)
+            ->where('weekly.rows.0.status', 'balanced')
+            ->where('weekly.totals.unallocatedPeople', 0));
+});
+
+it('classifies weekly capacity states and aggregates their totals from the returned rows', function () {
+    $user = User::factory()->create();
+    $user->givePermissionTo(PermissionName::ViewTeamLead->value, PermissionName::ViewManagement->value);
+    $project = Project::factory()->create(['client' => 'Acme', 'name' => 'Portal']);
+    $people = collect([
+        'Ana Available' => 24,
+        'Bogdan Balanced' => 40,
+        'Corina Over' => 48,
+        'Dan Unallocated' => null,
+    ])->map(function (?int $hours, string $name) use ($project): Person {
+        $person = Person::factory()->create([
+            'name' => $name,
+            'weekly_capacity_hours' => 40,
+        ]);
+
+        if ($hours !== null) {
+            Allocation::factory()->create([
+                'person_id' => $person,
+                'project_id' => $project,
+                'month' => '2026-07-01',
+                'planned_hours' => $hours,
+                'weekly_hours' => [
+                    ['week_start' => '2026-07-13', 'hours' => $hours],
+                ],
+            ]);
+        }
+
+        return $person;
+    });
+
+    $weekly = $this->actingAs($user)
+        ->get(route('team_lead.index', ['week' => '2026-07-13']))
+        ->assertSuccessful()
+        ->inertiaProps('weekly');
+    $rows = collect($weekly['rows'])->keyBy('person.name');
+
+    expect($rows->get('Ana Available')['status'])->toBe('available')
+        ->and($rows->get('Bogdan Balanced')['status'])->toBe('balanced')
+        ->and($rows->get('Corina Over')['status'])->toBe('over')
+        ->and($rows->get('Dan Unallocated')['status'])->toBe('unallocated')
+        ->and($weekly['totals'])->toMatchArray([
+            'contractHours' => $rows->sum('contractHours'),
+            'leaveHours' => $rows->sum('leaveHours'),
+            'availableHours' => $rows->sum('availableHours'),
+            'allocatedHours' => $rows->sum('allocatedHours'),
+            'freeHours' => $rows->sum(fn (array $row): float => max(0, $row['freeHours'])),
+            'overallocatedPeople' => $rows->where('status', 'over')->count(),
+            'unallocatedPeople' => $rows->where('status', 'unallocated')->count(),
+        ])
+        ->and($people)->toHaveCount(4);
 });

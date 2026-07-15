@@ -31,9 +31,11 @@ return [
     ],
     'pm_board' => [
         'deliverables_template' => 'Livrabile / Fixed',
+        'not_configured' => 'Neconfigurat',
         'planning_conflict' => 'Planificarea a fost modificată de alt utilizator. Reîncarcă pagina.',
         'week_must_start_on_monday' => 'Săptămâna trebuie să înceapă luni.',
         'general_module' => 'General',
+        'annex_data_missing' => 'Date anexă lipsă',
     ],
     'adjustments' => [
         'created' => 'Ajustarea a fost înregistrată.',

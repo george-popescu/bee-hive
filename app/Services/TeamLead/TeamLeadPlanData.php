@@ -244,7 +244,9 @@ final class TeamLeadPlanData
             $freeHours = round($availableHours - $allocatedHours, 2);
             $status = $freeHours < 0
                 ? 'over'
-                : ($allocatedHours <= 0 ? 'unallocated' : ($freeHours > 0 ? 'available' : 'balanced'));
+                : ($allocatedHours <= 0 && $availableHours > 0
+                    ? 'unallocated'
+                    : ($freeHours > 0 ? 'available' : 'balanced'));
 
             return [
                 'person' => [

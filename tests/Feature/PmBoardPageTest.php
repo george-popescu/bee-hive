@@ -2,6 +2,7 @@
 
 use App\Enums\ClickUpLocationKind;
 use App\Enums\PermissionName;
+use App\Enums\ProjectBoardTemplate;
 use App\Models\ClickUpFolder;
 use App\Models\ClickUpList;
 use App\Models\ClickUpTask;
@@ -90,6 +91,8 @@ it('limits a project manager to managed projects and forbids an outside project'
 });
 
 it('builds weekly worked and upcoming metrics from period and lifetime hours', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-07-08 12:00:00', 'Europe/Bucharest'));
+
     $user = globalPmBoardViewer();
     $user->givePermissionTo(
         PermissionName::ManagePmPlanning->value,
@@ -142,6 +145,7 @@ it('builds weekly worked and upcoming metrics from period and lifetime hours', f
             ->component('pm-board/index', false)
             ->where('period.start', '2026-07-06')
             ->where('period.end', '2026-07-12')
+            ->where('today', '2026-07-08')
             ->where('period.label', '6 jul – 12 jul 2026')
             ->where('period.previousAnchor', '2026-07-01')
             ->where('period.nextAnchor', '2026-07-15')
@@ -212,6 +216,28 @@ it('uses calendar month boundaries and month navigation', function () {
             ->where('summaryCharts.timeline.0.label', '1 jul–5 jul')
             ->where('summaryCharts.timeline.4.label', '27 jul–31 jul')
             ->where('summaryCharts.timeline.4.hours', 2));
+});
+
+it('keeps the requested month view for a deliverables project', function () {
+    $user = globalPmBoardViewer();
+    $project = Project::factory()->create([
+        'contract_type' => ProjectBoardTemplate::Deliverables,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('pm_board.index', [
+            'project' => $project->id,
+            'period' => 'month',
+            'anchor' => '2026-07-15',
+        ]))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('selectedProject.id', $project->id)
+            ->where('selectedProject.template', ProjectBoardTemplate::Deliverables->value)
+            ->has('annexBoard.annexes')
+            ->where('period.type', 'month')
+            ->where('period.start', '2026-07-01')
+            ->where('period.end', '2026-07-31'));
 });
 
 it('uses Bucharest calendar boundaries while storing timestamps in UTC', function () {
@@ -292,7 +318,7 @@ it('orders projects by worked hours in the selected range', function () {
             ->where('projects.3.id', $zeroHours->id));
 });
 
-it('aggregates every visible project when no individual project is selected', function () {
+it('selects the highest activity visible project when no project is requested', function () {
     $user = globalPmBoardViewer();
     $person = Person::factory()->create(['name' => 'Ana']);
     $firstProject = Project::factory()->create(['client' => 'Acme', 'name' => 'Portal']);
@@ -325,41 +351,74 @@ it('aggregates every visible project when no individual project is selected', fu
         ]))
         ->assertSuccessful()
         ->assertInertia(fn (Assert $page) => $page
-            ->where('allProjectsSelected', true)
-            ->where('selectedProject', null)
+            ->where('allProjectsSelected', false)
+            ->where('selectedProject.id', $secondProject->id)
+            ->where('selectedProjectIds', [$secondProject->id])
+            ->where('includeInternal', false)
             ->has('projects', 2)
-            ->has('workedTasks', 2)
+            ->has('workedTasks', 1)
             ->where('workedTasks.0.projectLabel', 'Beta — Mobile')
             ->where('workedTasks.0.periodHours', 3)
-            ->where('workedTasks.1.projectLabel', 'Acme — Portal')
-            ->where('workedTasks.1.periodHours', 2)
-            ->has('upcomingTasks', 2)
-            ->where('peopleWorked.0', ['name' => 'Ana', 'hours' => 5, 'tasks' => 2])
+            ->has('upcomingTasks', 1)
+            ->where('peopleWorked.0', ['name' => 'Ana', 'hours' => 3, 'tasks' => 1])
             ->where('summaryCharts.projects', [
                 ['label' => 'Beta — Mobile', 'hours' => 3],
-                ['label' => 'Acme — Portal', 'hours' => 2],
             ])
             ->has('summaryCharts.timeline', 7)
             ->where('summaryCharts.timeline.2.label', 'Wed 8')
-            ->where('summaryCharts.timeline.2.hours', 5)
+            ->where('summaryCharts.timeline.2.hours', 3)
             ->where('summaryCharts.timeline.2.projects', [
                 ['label' => 'Beta — Mobile', 'hours' => 3],
-                ['label' => 'Acme — Portal', 'hours' => 2],
             ])
             ->where('summaryCharts.people.0.key', 'person:'.$person->id)
             ->where('summaryCharts.people.0.name', 'Ana')
-            ->where('summaryCharts.people.0.hours', 5)
-            ->where('summaryCharts.people.0.tasks', 2)
+            ->where('summaryCharts.people.0.hours', 3)
+            ->where('summaryCharts.people.0.tasks', 1)
             ->where('summaryCharts.people.0.projects', [
                 ['label' => 'Beta — Mobile', 'hours' => 3],
-                ['label' => 'Acme — Portal', 'hours' => 2],
             ])
             ->where('planning', null)
             ->where('gantt', null)
-            ->where('kpis.actualHours', 5)
-            ->where('kpis.workedTasks', 2)
+            ->where('kpis.actualHours', 3)
+            ->where('kpis.workedTasks', 1)
             ->where('kpis.activePeople', 1)
-            ->where('kpis.projects', 2));
+            ->where('kpis.projects', 1));
+});
+
+it('preserves time materials deliverables and unconfigured project templates', function () {
+    $user = globalPmBoardViewer();
+    $timeAndMaterials = Project::factory()->create([
+        'client' => 'Alpha',
+        'name' => 'T&M',
+        'contract_type' => ProjectBoardTemplate::TimeAndMaterials,
+    ]);
+    $deliverables = Project::factory()->create([
+        'client' => 'Beta',
+        'name' => 'Fixed',
+        'contract_type' => ProjectBoardTemplate::Deliverables,
+    ]);
+    $unconfigured = Project::factory()->create([
+        'client' => 'Gamma',
+        'name' => 'Unknown',
+        'contract_type' => null,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('pm_board.index', ['project' => $unconfigured->id]))
+        ->assertSuccessful()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('projects.0.id', $timeAndMaterials->id)
+            ->where('projects.0.template', 'tm')
+            ->where('projects.0.templateLabel', 'Time & Materials')
+            ->where('projects.1.id', $deliverables->id)
+            ->where('projects.1.template', 'deliverables')
+            ->where('projects.1.templateLabel', 'Deliverables / Fixed')
+            ->where('projects.2.id', $unconfigured->id)
+            ->where('projects.2.template', null)
+            ->where('projects.2.templateLabel', 'Not configured')
+            ->where('selectedProject.id', $unconfigured->id)
+            ->where('selectedProject.template', null)
+            ->where('selectedProject.templateLabel', 'Not configured'));
 });
 
 it('aggregates a custom selection of multiple projects', function () {
@@ -454,11 +513,11 @@ it('shows ClickUp calls and overhead as selectable internal activity', function 
             'anchor' => '2026-07-08',
         ]))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('allProjectsSelected', true)
+            ->where('allProjectsSelected', false)
             ->where('selectedProjectIds', [$project->id])
-            ->where('includeInternal', true)
-            ->has('workedTasks', 2)
-            ->where('kpis.actualHours', 6));
+            ->where('includeInternal', false)
+            ->has('workedTasks', 1)
+            ->where('kpis.actualHours', 2));
 });
 
 it('keeps contributors with the same display name separate by stable identity', function () {

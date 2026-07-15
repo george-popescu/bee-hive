@@ -47,7 +47,7 @@ class PmBoardController extends Controller
         return $this->board->for(
             user: $request->user(),
             selectedProjectIds: $selectedProjectIds,
-            includeInternal: ! $isCustomSelection || (bool) ($data['include_internal'] ?? false),
+            includeInternal: $isCustomSelection && (bool) ($data['include_internal'] ?? false),
             allProjectsSelected: ! $isCustomSelection,
             period: $data['period'] ?? 'week',
             anchor: isset($data['anchor']) ? CarbonImmutable::parse($data['anchor']) : now()->toImmutable(),
