@@ -342,7 +342,7 @@ it('orders projects by worked hours in the selected range', function () {
             ->where('projects.3.id', $zeroHours->id));
 });
 
-it('selects the highest activity visible project when no project is requested', function () {
+it('aggregates every visible project when no project is requested', function () {
     $user = globalPmBoardViewer();
     $person = Person::factory()->create(['name' => 'Ana']);
     $firstProject = Project::factory()->create(['client' => 'Acme', 'name' => 'Portal']);
@@ -375,38 +375,43 @@ it('selects the highest activity visible project when no project is requested', 
         ]))
         ->assertSuccessful()
         ->assertInertia(fn (Assert $page) => $page
-            ->where('allProjectsSelected', false)
-            ->where('selectedProject.id', $secondProject->id)
-            ->where('selectedProjectIds', [$secondProject->id])
+            ->where('allProjectsSelected', true)
+            ->where('selectedProject', null)
+            ->where('selectedProjectIds', [$secondProject->id, $firstProject->id])
             ->where('includeInternal', false)
             ->has('projects', 2)
-            ->has('workedTasks', 1)
+            ->has('workedTasks', 2)
             ->where('workedTasks.0.projectLabel', 'Beta — Mobile')
             ->where('workedTasks.0.periodHours', 3)
-            ->has('upcomingTasks', 1)
-            ->where('peopleWorked.0', ['name' => 'Ana', 'hours' => 3, 'tasks' => 1])
+            ->where('workedTasks.1.projectLabel', 'Acme — Portal')
+            ->where('workedTasks.1.periodHours', 2)
+            ->has('upcomingTasks', 2)
+            ->where('peopleWorked.0', ['name' => 'Ana', 'hours' => 5, 'tasks' => 2])
             ->where('summaryCharts.projects', [
                 ['label' => 'Beta — Mobile', 'hours' => 3],
+                ['label' => 'Acme — Portal', 'hours' => 2],
             ])
             ->has('summaryCharts.timeline', 7)
             ->where('summaryCharts.timeline.2.label', 'Wed 8')
-            ->where('summaryCharts.timeline.2.hours', 3)
+            ->where('summaryCharts.timeline.2.hours', 5)
             ->where('summaryCharts.timeline.2.projects', [
                 ['label' => 'Beta — Mobile', 'hours' => 3],
+                ['label' => 'Acme — Portal', 'hours' => 2],
             ])
             ->where('summaryCharts.people.0.key', 'person:'.$person->id)
             ->where('summaryCharts.people.0.name', 'Ana')
-            ->where('summaryCharts.people.0.hours', 3)
-            ->where('summaryCharts.people.0.tasks', 1)
+            ->where('summaryCharts.people.0.hours', 5)
+            ->where('summaryCharts.people.0.tasks', 2)
             ->where('summaryCharts.people.0.projects', [
                 ['label' => 'Beta — Mobile', 'hours' => 3],
+                ['label' => 'Acme — Portal', 'hours' => 2],
             ])
             ->where('planning', null)
             ->where('gantt', null)
-            ->where('kpis.actualHours', 3)
-            ->where('kpis.workedTasks', 1)
+            ->where('kpis.actualHours', 5)
+            ->where('kpis.workedTasks', 2)
             ->where('kpis.activePeople', 1)
-            ->where('kpis.projects', 1));
+            ->where('kpis.projects', 2));
 });
 
 it('preserves time materials deliverables and unconfigured project templates', function () {
@@ -537,7 +542,7 @@ it('shows ClickUp calls and overhead as selectable internal activity', function 
             'anchor' => '2026-07-08',
         ]))
         ->assertInertia(fn (Assert $page) => $page
-            ->where('allProjectsSelected', false)
+            ->where('allProjectsSelected', true)
             ->where('selectedProjectIds', [$project->id])
             ->where('includeInternal', false)
             ->has('workedTasks', 1)

@@ -57,6 +57,7 @@ export type ProjectSelectorViewProps = {
     projects: ProjectSelectorProject[];
     selectedPmId: number | null;
     selectedProject: ProjectSelectorProject | null;
+    allProjectsSelected: boolean;
     today: string;
     period: Period;
     upcomingTasks: BoardTask[];
@@ -244,12 +245,14 @@ export function ProjectSelectorView({
     projects,
     selectedPmId,
     selectedProject,
+    allProjectsSelected,
     today,
     period,
     upcomingTasks,
     kpis,
 }: ProjectSelectorViewProps) {
     const { languageTag, t } = useTranslations();
+    const isAggregateView = allProjectsSelected && projects.length > 0;
     const estimatedTasks = upcomingTasks
         .filter((task) => task.estimateHours !== null)
         .sort(
@@ -321,12 +324,17 @@ export function ProjectSelectorView({
                             {t('PM boards · read-only from ClickUp')}
                         </span>
                         <h1 className="truncate text-xl leading-tight font-medium">
-                            {selectedProject?.label ?? t('No project selected')}
+                            {selectedProject?.label ??
+                                (isAggregateView
+                                    ? t('All projects')
+                                    : t('No project selected'))}
                         </h1>
                         <p className="text-muted-foreground">
                             {selectedProject
                                 ? t(templateSubtitle(selectedProject.template))
-                                : t('No visible projects are available.')}
+                                : isAggregateView
+                                  ? t('Aggregated across every visible project')
+                                  : t('No visible projects are available.')}
                         </p>
                     </div>
 
@@ -345,7 +353,11 @@ export function ProjectSelectorView({
                                     className="h-7 w-full rounded-[10px] bg-foreground/[0.06] px-2 shadow-none data-[size=default]:h-7 dark:bg-foreground/10"
                                 >
                                     <SelectValue
-                                        placeholder={t('No project selected')}
+                                        placeholder={
+                                            isAggregateView
+                                                ? t('All projects')
+                                                : t('No project selected')
+                                        }
                                     />
                                 </SelectTrigger>
                                 <SelectContent align="start">

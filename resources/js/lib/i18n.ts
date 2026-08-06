@@ -370,6 +370,8 @@ const romanianMessages = {
     'Source: ClickUp · estimated budget from :budget; recorded hours from :operations.':
         'Sursă: ClickUp · buget estimat din :budget; ore înregistrate din :operations.',
     'No project selected': 'Niciun proiect selectat',
+    'Aggregated across every visible project':
+        'Agregat pentru toate proiectele vizibile',
     'No visible projects are available.':
         'Nu există proiecte vizibile disponibile.',
     'T&M · approved task estimates · weekly execution':

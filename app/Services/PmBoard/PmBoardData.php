@@ -62,12 +62,9 @@ class PmBoardData
         [$rangeStart, $rangeEnd] = $this->range($anchor, $period);
         $periodSecondsByProject = $this->periodSecondsByProject($projects, $rangeStart, $rangeEnd);
         $projects = $this->orderProjectsByPeriodHours($projects, $periodSecondsByProject);
-        if ($allProjectsSelected) {
-            $selectedProjects = $projects->take(1)->values();
-            $allProjectsSelected = false;
-        } else {
-            $selectedProjects = $projects->whereIn('id', $selectedProjectIds)->values();
-        }
+        $selectedProjects = $allProjectsSelected
+            ? $projects->values()
+            : $projects->whereIn('id', $selectedProjectIds)->values();
         $selectedProject = $selectedProjects->count() === 1 && ! $includeInternal
             ? $selectedProjects->first()
             : null;
