@@ -24,6 +24,7 @@ final class HttpClickUpClient implements ClickUpClient
         private readonly string $baseUrl = 'https://api.clickup.com/api/v2',
         private readonly int $requestTimeoutSeconds = 60,
         private readonly int $connectTimeoutSeconds = 15,
+        private readonly int $maxRateLimitWaitSeconds = 60,
     ) {
         foreach ([$this->token, $this->workspaceId, $this->projectsSpaceId, $this->holidaysListId] as $value) {
             if (trim($value) === '') {
@@ -33,6 +34,10 @@ final class HttpClickUpClient implements ClickUpClient
 
         if ($this->requestTimeoutSeconds < 1 || $this->connectTimeoutSeconds < 1) {
             throw new RuntimeException('ClickUp integration timeout configuration is invalid.');
+        }
+
+        if ($this->maxRateLimitWaitSeconds < 1) {
+            throw new RuntimeException('ClickUp integration rate-limit configuration is invalid.');
         }
     }
 
@@ -191,15 +196,37 @@ final class HttpClickUpClient implements ClickUpClient
 
     private function retryDelayMicroseconds(Response $response, int $attempt): int
     {
-        $resetAt = $response->header('X-RateLimit-Reset');
-
-        if ($response->status() === 429 && is_numeric($resetAt)) {
-            $seconds = max(1, (int) $resetAt - time());
-
-            return min($seconds, 5) * 1_000_000;
+        if ($response->status() === 429) {
+            return $this->rateLimitWaitSeconds($response, $attempt) * 1_000_000;
         }
 
         return min($attempt, 5) * 250_000;
+    }
+
+    /**
+     * ClickUp resets its rate-limit window every minute, so a throttled request has to
+     * wait out the window the response advertises instead of retrying a few seconds later.
+     */
+    private function rateLimitWaitSeconds(Response $response, int $attempt): int
+    {
+        $retryAfter = $response->header('Retry-After');
+
+        if (is_numeric($retryAfter)) {
+            return $this->clampRateLimitWait((int) $retryAfter);
+        }
+
+        $resetAt = $response->header('X-RateLimit-Reset');
+
+        if (is_numeric($resetAt)) {
+            return $this->clampRateLimitWait((int) $resetAt - time());
+        }
+
+        return $this->clampRateLimitWait(5 * (2 ** ($attempt - 1)));
+    }
+
+    private function clampRateLimitWait(int $seconds): int
+    {
+        return max(1, min($seconds, $this->maxRateLimitWaitSeconds));
     }
 
     /**

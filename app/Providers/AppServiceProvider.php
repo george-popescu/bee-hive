@@ -29,6 +29,7 @@ class AppServiceProvider extends ServiceProvider
             baseUrl: (string) config('services.clickup.base_url'),
             requestTimeoutSeconds: (int) config('services.clickup.request_timeout_seconds'),
             connectTimeoutSeconds: (int) config('services.clickup.connect_timeout_seconds'),
+            maxRateLimitWaitSeconds: (int) config('services.clickup.max_rate_limit_wait_seconds'),
         ));
 
         $this->app->bind(HierarchySynchronizer::class, fn (): HierarchySynchronizer => new HierarchySynchronizer(

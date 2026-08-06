@@ -43,6 +43,7 @@ return [
         'holidays_list_id' => env('CLICKUP_HOLIDAYS_LIST_ID'),
         'request_timeout_seconds' => (int) env('CLICKUP_REQUEST_TIMEOUT_SECONDS', 60),
         'connect_timeout_seconds' => (int) env('CLICKUP_CONNECT_TIMEOUT_SECONDS', 15),
+        'max_rate_limit_wait_seconds' => (int) env('CLICKUP_MAX_RATE_LIMIT_WAIT_SECONDS', 60),
         'internal_folder_ids' => array_values(array_filter(array_map(
             'trim',
             explode(',', (string) env('CLICKUP_INTERNAL_FOLDER_IDS', '90126307579,90126297615')),

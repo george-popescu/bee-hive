@@ -6,7 +6,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 
-function makeHttpClickUpClient(): HttpClickUpClient
+function makeHttpClickUpClient(int $maxRateLimitWaitSeconds = 60): HttpClickUpClient
 {
     return new HttpClickUpClient(
         token: 'raw-clickup-token',
@@ -14,6 +14,7 @@ function makeHttpClickUpClient(): HttpClickUpClient
         projectsSpaceId: 'space-456',
         holidaysListId: 'list-789',
         baseUrl: 'https://clickup.test/api/v2',
+        maxRateLimitWaitSeconds: $maxRateLimitWaitSeconds,
     );
 }
 
@@ -113,6 +114,57 @@ it('keeps retrying temporary ClickUp server responses', function () {
 
     expect(makeHttpClickUpClient()->folders())->toBe([])
         ->and(Http::recorded())->toHaveCount(2);
+});
+
+it('waits for the advertised rate-limit window without exceeding the configured ceiling', function () {
+    Http::fakeSequence()
+        ->push(['message' => 'Rate limit exceeded'], 429, [
+            'X-RateLimit-Reset' => (string) (time() + 3_600),
+        ])
+        ->push(['folders' => []]);
+
+    $startedAt = microtime(true);
+    $folders = makeHttpClickUpClient(maxRateLimitWaitSeconds: 1)->folders();
+    $elapsed = microtime(true) - $startedAt;
+
+    expect($folders)->toBe([])
+        ->and(Http::recorded())->toHaveCount(2)
+        ->and($elapsed)->toBeGreaterThanOrEqual(1.0)
+        ->and($elapsed)->toBeLessThan(10.0);
+});
+
+it('prefers the Retry-After header over the rate-limit reset timestamp', function () {
+    Http::fakeSequence()
+        ->push(['message' => 'Rate limit exceeded'], 429, [
+            'Retry-After' => '1',
+            'X-RateLimit-Reset' => (string) (time() + 3_600),
+        ])
+        ->push(['folders' => []]);
+
+    $startedAt = microtime(true);
+    $folders = makeHttpClickUpClient(maxRateLimitWaitSeconds: 60)->folders();
+    $elapsed = microtime(true) - $startedAt;
+
+    expect($folders)->toBe([])
+        ->and($elapsed)->toBeGreaterThanOrEqual(1.0)
+        ->and($elapsed)->toBeLessThan(10.0);
+});
+
+it('backs off a rate-limited response that advertises no reset window', function () {
+    Http::fakeSequence()
+        ->push(['message' => 'Rate limit exceeded'], 429)
+        ->push(['folders' => []]);
+
+    $startedAt = microtime(true);
+    $folders = makeHttpClickUpClient(maxRateLimitWaitSeconds: 1)->folders();
+
+    expect($folders)->toBe([])
+        ->and(microtime(true) - $startedAt)->toBeGreaterThanOrEqual(1.0);
+});
+
+it('rejects an invalid rate-limit configuration', function () {
+    expect(fn () => makeHttpClickUpClient(maxRateLimitWaitSeconds: 0))
+        ->toThrow(RuntimeException::class, 'ClickUp integration rate-limit configuration is invalid.');
 });
 
 it('does not retry ClickUp client errors', function () {
